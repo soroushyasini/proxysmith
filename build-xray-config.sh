@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# build-xray-config.sh  —  RomanLegioner daily config builder
+# proxysmith.sh  —  RomanLegioner daily config builder
 # Requires: xray-knife (in PATH), python3, jq
 # Usage:
-#   bash build-xray-config.sh            # generate only
-#   bash build-xray-config.sh --deploy   # generate + deploy + restart xray
+#   bash proxysmith.sh            # generate only
+#   bash proxysmith.sh --deploy   # generate + deploy + restart xray
 # =============================================================================
 
 set -euo pipefail

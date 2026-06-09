@@ -74,7 +74,7 @@ sudo apt install python3 jq -y
 
 ```bash
 git clone https://github.com/soroushyasini/proxysmith.git
-cd xray-config-builder
+cd proxysmith
 chmod +x proxysmith.sh
 ```
 
@@ -158,10 +158,10 @@ crontab -e
 Add:
 
 ```
-0 6 * * * /bin/bash /path/to/proxysmith.sh --deploy >> /var/log/xray-build.log 2>&1
+0 6 * * * /bin/bash /path/to/proxysmith.sh --deploy >> /var/log/proxysmith.log 2>&1
 ```
 
-Or with a systemd timer — create `/etc/systemd/system/xray-build.timer`:
+Or with a systemd timer — create `/etc/systemd/system/proxysmith.timer`:
 
 ```ini
 [Unit]
@@ -175,7 +175,7 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-And `/etc/systemd/system/xray-build.service`:
+And `/etc/systemd/system/proxysmith.service`:
 
 ```ini
 [Unit]
@@ -192,7 +192,7 @@ Enable:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now xray-build.timer
+sudo systemctl enable --now proxysmith.timer
 ```
 
 ---

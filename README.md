@@ -73,7 +73,7 @@ sudo apt install python3 jq -y
 ## Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/xray-config-builder.git
+git clone https://github.com/soroushyasini/proxysmith.git
 cd xray-config-builder
 chmod +x build-xray-config.sh
 ```

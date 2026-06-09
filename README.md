@@ -1,4 +1,4 @@
-# xray-config-builder
+# proxysmith : xray configuration assembler with balancer and brutal conncetivity test
 
 A bash script that automatically fetches, tests, deduplicates, and assembles a production-ready [Xray](https://github.com/XTLS/Xray-core) `config.json` from public proxy subscription feeds — daily, hands-free.
 

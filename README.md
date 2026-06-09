@@ -75,14 +75,14 @@ sudo apt install python3 jq -y
 ```bash
 git clone https://github.com/soroushyasini/proxysmith.git
 cd xray-config-builder
-chmod +x build-xray-config.sh
+chmod +x proxysmith.sh
 ```
 
 ---
 
 ## Configuration
 
-Edit the tunables at the top of `build-xray-config.sh`:
+Edit the tunables at the top of `proxysmith.sh`:
 
 ```bash
 # ── TUNABLES ──────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ SAVE_URIS="/home/youruser/last_configs.txt"        # raw URIs output file
 ### Generate only (no deployment)
 
 ```bash
-bash build-xray-config.sh
+bash proxysmith.sh
 ```
 
 The script will:
@@ -131,7 +131,7 @@ sudo systemctl restart xray
 ### Generate + auto-deploy
 
 ```bash
-sudo bash build-xray-config.sh --deploy
+sudo bash proxysmith.sh --deploy
 ```
 
 This automatically backs up the existing config, deploys the new one, and restarts xray.
@@ -158,7 +158,7 @@ crontab -e
 Add:
 
 ```
-0 6 * * * /bin/bash /path/to/build-xray-config.sh --deploy >> /var/log/xray-build.log 2>&1
+0 6 * * * /bin/bash /path/to/proxysmith.sh --deploy >> /var/log/xray-build.log 2>&1
 ```
 
 Or with a systemd timer — create `/etc/systemd/system/xray-build.timer`:
@@ -183,7 +183,7 @@ Description=xray config builder
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash /path/to/build-xray-config.sh --deploy
+ExecStart=/bin/bash /path/to/proxysmith.sh --deploy
 StandardOutput=journal
 StandardError=journal
 ```

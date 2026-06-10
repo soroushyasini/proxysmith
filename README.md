@@ -1,28 +1,37 @@
-# proxysmith : xray configuration assembler with balancer and brutal conncetivity test
+# proxysmith — xray config assembler with balancer and brutal connectivity test
 
-A bash script that automatically fetches, tests, deduplicates, and assembles a production-ready [Xray](https://github.com/XTLS/Xray-core) `config.json` from public proxy subscription feeds — daily, hands-free.
+A bash toolkit that automatically fetches, tests, deduplicates, and assembles a production-ready [Xray](https://github.com/XTLS/Xray-core) `config.json` from public proxy subscription feeds — daily, hands-free.
 
 Built for Linux. Designed for operators who run Xray as a local or relay proxy and need a fresh, reliable outbound pool every day without manually testing thousands of configs.
 
 ---
 
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `proxysmith.sh` | Full 3-round pipeline: fetch → test → deduplicate → assemble → (optionally) deploy |
+| `manualconfig.sh` | Skip the testing — parse a hand-picked list of URIs directly into a ready `config.json` |
+
+---
+
 ## How it works
 
-The script runs a 3-round brutal elimination pipeline:
+`proxysmith.sh` runs a 3-round brutal elimination pipeline:
 
 ```
 ~6000 raw configs (from subscription URL)
         │
-        ▼  Round 1 — concurrent speedtest (threads=50)
+        ▼  Round 1 — concurrent speedtest (configurable threads, default 50)
         │  deduplicate by proto:host:port
-        │  filter by max latency
+        │  filter by max latency (configurable, default 5000ms)
         ▼
-      ~90 unique survivors
+   ~TOP_N×3 unique survivors  (default ~45)
         │
-        ▼  Round 2 — concurrent speedtest again (threads=20)
+        ▼  Round 2 — concurrent speedtest again (same thread count)
         │  confirm Round 1 results, drop flukes
         ▼
-      ~30 confirmed configs
+    ~TOP_N confirmed configs  (default ~15)
         │
         ▼  Round 3 — single-threaded, one by one (threads=1)
         │  no parallel noise, most honest test
@@ -30,11 +39,11 @@ The script runs a 3-round brutal elimination pipeline:
       top 12 battle-hardened configs
         │
         ▼
-  config.json  (Xray leastPing balancer)
-  last_configs.txt  (raw URIs for phone/other clients)
+  last_config.json   (Xray leastPing balancer — ready to deploy)
+  last_configs.txt   (raw URIs — import into phone clients)
 ```
 
-Only configs that survive all 3 rounds make it into the final `config.json`. The output uses Xray's `leastPing` balancer with observatory health checks, so the best outbound is always selected at runtime automatically.
+Only configs that survive all 3 rounds make it into the final `config.json`. The output uses Xray's `leastPing` balancer with observatory health checks so the best outbound is always selected at runtime automatically.
 
 ---
 
@@ -45,28 +54,11 @@ Only configs that survive all 3 rounds make it into the final `config.json`. The
 | `xray-knife` | Subscription fetch + proxy testing |
 | `xray` | Config validation + runtime |
 | `python3` | CSV parsing + JSON assembly |
-| `jq` | JSON validation |
+| `jq` | JSON utility (used for validation) |
+| `wget` | xray-knife download during auto-install |
+| `unzip` | xray-knife extraction during auto-install |
 
-### Install xray-knife
-
-```bash
-wget https://github.com/lilendian0x00/xray-knife/releases/latest/download/Xray-knife-linux-64.zip
-unzip Xray-knife-linux-64.zip
-sudo mv xray-knife /usr/local/bin/
-chmod +x /usr/local/bin/xray-knife
-```
-
-### Install xray
-
-```bash
-bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
-```
-
-### Install other deps (Debian/Ubuntu)
-
-```bash
-sudo apt install python3 jq -y
-```
+> **You do not need to install these manually.** Both scripts include a built-in dependency checker that detects what is missing, shows you the install plan, and asks for confirmation before running. See [Dependency auto-installer](#dependency-auto-installer) below.
 
 ---
 
@@ -75,56 +67,109 @@ sudo apt install python3 jq -y
 ```bash
 git clone https://github.com/soroushyasini/proxysmith.git
 cd proxysmith
-chmod +x proxysmith.sh
+chmod +x proxysmith.sh manualconfig.sh
 ```
 
 ---
 
-## Configuration
+## Running as root
 
-Edit the tunables at the top of `proxysmith.sh`:
+> ⚠️ **`proxysmith.sh` and `manualconfig.sh --deploy` must be run as root** (or with `sudo`).
+>
+> Root is required for:
+> - Installing dependencies (`apt-get`, moving binaries to `/usr/local/bin/`)
+> - Deploying the config to `/usr/local/etc/xray/config.json`
+> - Restarting the xray systemd service (`systemctl restart xray`)
+>
+> For the generate-only mode (no `--deploy`), root is still needed the first time if any dependencies are missing. Once all deps are installed you can run without root, but you will need to deploy manually.
 
 ```bash
-# ── TUNABLES ──────────────────────────────────────────────────────────────────
-SUB_URL="https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt"
-SUB_REMARK="epodonios-daily"
-MAX_PING_MS=5000        # discard configs slower than this in Round 1
-TOP_N=15                # controls Round 1 → Round 2 funnel size (keeps TOP_N × 3)
-TEST_THREADS=50         # parallel workers for Round 1 & 2
-OUTPUT_CONFIG="/usr/local/etc/xray/config.json"   # xray config path
-SAVE_CONFIG="/home/youruser/last_config.json"      # permanent config backup
-SAVE_URIS="/home/youruser/last_configs.txt"        # raw URIs output file
-# ─────────────────────────────────────────────────────────────────────────────
+# Recommended: run as root from the start
+sudo bash proxysmith.sh
+sudo bash proxysmith.sh --deploy
 ```
-
-**Key settings to change for your setup:**
-
-- `SUB_URL` — any v2ray/xray subscription URL (raw text or base64-encoded)
-- `SAVE_CONFIG` / `SAVE_URIS` — change `youruser` to your Linux username
-- `OUTPUT_CONFIG` — path where xray reads its config (check with `systemctl cat xray`)
-- `MAX_PING_MS` — raise if you get 0 results (public configs from Iran often have 1000–3000ms latency on tested from inside Iran)
-- `TEST_THREADS` — lower if your machine is low-powered or network is slow
 
 ---
 
-## Usage
+## Dependency auto-installer
+
+On first run, the script checks for every required tool and shows a colour-coded status table:
+
+```
+  🔍  Checking dependencies
+  ──────────────────────────────────────────────────
+  [✗]  xray-knife         not in PATH — needs manual install
+  [✗]  xray               not in PATH — needs manual install
+  [✓]  python3            /usr/bin/python3
+  [✗]  jq                 will install via apt
+  [✓]  wget               /usr/bin/wget
+  [✓]  unzip              /usr/bin/unzip
+  ──────────────────────────────────────────────────
+
+  Will install via apt:  jq
+
+  Require a one-time download/install:
+    xray-knife  →  downloaded from GitHub releases
+    xray        →  installed via official XTLS installer script
+
+  Install missing dependencies now? [Y/n]  (Enter = yes):
+```
+
+Answer `Y` (or just press Enter) and the script handles everything:
+- `jq`, `python3`, `wget`, `unzip` → installed via `apt-get`
+- `xray-knife` → downloaded from the latest GitHub release, moved to `/usr/local/bin/`
+- `xray` → installed via the official `https://github.com/XTLS/Xray-install` script
+
+A final re-check confirms all deps are present before the main run begins. On subsequent runs, if all deps are already installed, this step takes under a second and proceeds automatically.
+
+---
+
+## Usage — `proxysmith.sh`
+
+### Interactive setup
+
+Every run starts with an interactive prompt where you configure three parameters for that session:
+
+```
+  ⚙  Configure this run
+  ──────────────────────────────────────────────────
+
+  MAX_PING_MS
+  Max latency threshold — configs slower than this are dropped in Round 1.
+  Inside Iran, public configs typically range 1000–3000ms. Use 5000 for a wide net.
+  Value [default: 5000, Enter to skip]:
+
+  TOP_N
+  Funnel size — Round 1 keeps TOP_N×3, Round 2 keeps TOP_N, Round 3 keeps 12.
+  Higher = broader net + longer runtime. Lower = faster, may miss good configs.
+  Value [default: 15, Enter to skip]:
+
+  TEST_THREADS
+  Parallel workers used in Round 1 & 2.
+  50 works well on modern hardware. Drop to 10–20 on slow or low-RAM machines.
+  Value [default: 50, Enter to skip]:
+```
+
+Just press Enter to accept all defaults and proceed.
 
 ### Generate only (no deployment)
 
 ```bash
-bash proxysmith.sh
+sudo bash proxysmith.sh
 ```
 
 The script will:
-1. Fetch fresh configs from the subscription URL
-2. Run 3 rounds of testing (~25–30 minutes for 6000 configs)
-3. Save results to `SAVE_CONFIG` and `SAVE_URIS`
-4. Print deploy instructions at the end
+1. Run the dependency checker (installs anything missing)
+2. Prompt for `MAX_PING_MS`, `TOP_N`, `TEST_THREADS` (Enter = defaults)
+3. Fetch fresh configs from the subscription URL
+4. Run 3 rounds of testing (~20–30 minutes for ~6000 configs at default settings)
+5. Save results to `last_config.json` and `last_configs.txt` in the script directory
+6. Print deploy instructions at the end
 
-Then deploy manually:
+Deploy manually when ready:
 
 ```bash
-sudo cp ~/last_config.json /usr/local/etc/xray/config.json
+sudo cp last_config.json /usr/local/etc/xray/config.json
 sudo systemctl restart xray
 ```
 
@@ -134,7 +179,69 @@ sudo systemctl restart xray
 sudo bash proxysmith.sh --deploy
 ```
 
-This automatically backs up the existing config, deploys the new one, and restarts xray.
+Automatically backs up the existing config, deploys the new one, and restarts xray.
+
+---
+
+## Usage — `manualconfig.sh`
+
+When you already have configs you trust and just want to package them — skip the whole testing pipeline and parse them directly into a `config.json`.
+
+### Input file
+
+Create `manualconfig.txt` in the same directory (one URI per line):
+
+```
+# lines starting with # are ignored
+# blank lines are ignored
+
+vless://your-uuid@your-server.com:443?type=tcp&security=reality&...#MyVless
+ss://base64encodedstring@your-server.com:8388#MyShadowsocks
+trojan://your-password@your-server.com:443?type=ws&path=/ws#MyTrojan
+```
+
+**Accepted protocols:** `vless://`, `vmess://`, `trojan://`, `ss://`, `tuic://`, `hysteria2://`, `hy2://`
+
+### Run
+
+```bash
+# default: reads manualconfig.txt → writes manualconfig.json
+sudo bash manualconfig.sh
+
+# custom input file
+sudo bash manualconfig.sh my_proxies.txt
+
+# custom input + output
+sudo bash manualconfig.sh proxies.txt output.json
+
+# parse + deploy + restart xray
+sudo bash manualconfig.sh --deploy
+```
+
+### Output
+
+`manualconfig.json` — same structure as `proxysmith.sh` output: SOCKS5 inbound on `127.0.0.1:10808`, `leastPing` balancer, observatory, API, stats. Ready to deploy as-is.
+
+---
+
+## Fixed settings
+
+These live at the top of `proxysmith.sh` and require editing the file to change:
+
+```bash
+SUB_URL="https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt"
+SUB_REMARK="proxysmith-daily"
+OUTPUT_CONFIG="/usr/local/etc/xray/config.json"   # where --deploy writes the config
+SAVE_CONFIG="$SCRIPT_DIR/last_config.json"         # config backup (script directory)
+SAVE_URIS="$SCRIPT_DIR/last_configs.txt"           # raw URIs output (script directory)
+```
+
+**Things you might want to change:**
+
+- `SUB_URL` — any v2ray/xray subscription URL (raw text or base64-encoded list)
+- `OUTPUT_CONFIG` — path where xray reads its config (verify with `systemctl cat xray`)
+
+The three runtime parameters (`MAX_PING_MS`, `TOP_N`, `TEST_THREADS`) are set interactively at each run — no file editing needed.
 
 ---
 
@@ -142,58 +249,9 @@ This automatically backs up the existing config, deploys the new one, and restar
 
 | File | Contents |
 |---|---|
-| `last_config.json` | Full Xray config.json ready to deploy |
-| `last_configs.txt` | One URI per line — import into v2rayNG, Hiddify, etc. |
-
----
-
-## Automating with cron
-
-To rebuild and deploy every day at 6am:
-
-```bash
-crontab -e
-```
-
-Add:
-
-```
-0 6 * * * /bin/bash /path/to/proxysmith.sh --deploy >> /var/log/proxysmith.log 2>&1
-```
-
-Or with a systemd timer — create `/etc/systemd/system/proxysmith.timer`:
-
-```ini
-[Unit]
-Description=Daily xray config rebuild
-
-[Timer]
-OnCalendar=*-*-* 06:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-And `/etc/systemd/system/proxysmith.service`:
-
-```ini
-[Unit]
-Description=xray config builder
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash /path/to/proxysmith.sh --deploy
-StandardOutput=journal
-StandardError=journal
-```
-
-Enable:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now proxysmith.timer
-```
+| `last_config.json` | Full Xray `config.json` ready to deploy (written to script directory) |
+| `last_configs.txt` | One URI per line — import into v2rayNG, Hiddify, Shadowrocket, etc. |
+| `manualconfig.json` | Output of `manualconfig.sh` — same format, different source |
 
 ---
 
@@ -221,7 +279,7 @@ gsettings set org.gnome.system.proxy.socks port 10808
 
 ---
 
-## Using last_configs.txt on your phone
+## Using `last_configs.txt` on your phone
 
 After each run, `last_configs.txt` contains the 12 best configs as raw URIs:
 
@@ -238,22 +296,85 @@ Import into any v2ray-compatible client:
 
 ---
 
+## Automating with cron
+
+To rebuild and deploy every day at 6am:
+
+```bash
+crontab -e
+```
+
+Add:
+
+```
+0 6 * * * /bin/bash /path/to/proxysmith.sh --deploy >> /var/log/proxysmith.log 2>&1
+```
+
+> Note: cron jobs run as the user whose crontab you edit. Use `root`'s crontab (`sudo crontab -e`) or prefix with `sudo` to ensure the deploy step has the required permissions.
+
+### Or with a systemd timer
+
+`/etc/systemd/system/proxysmith.timer`:
+
+```ini
+[Unit]
+Description=Daily xray config rebuild
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+`/etc/systemd/system/proxysmith.service`:
+
+```ini
+[Unit]
+Description=xray config builder
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /path/to/proxysmith.sh --deploy
+StandardOutput=journal
+StandardError=journal
+```
+
+Enable:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now proxysmith.timer
+```
+
+---
+
 ## Troubleshooting
 
 **`0 configs passed the filter`**
-Raise `MAX_PING_MS` — the testing machine's network path to proxy servers may be slow. Try `5000` (5 seconds).
+Raise `MAX_PING_MS` at the interactive prompt — the network path from the test machine to proxy servers may be slow. Try `8000` or `10000`. Public configs tested from inside Iran often have 1000–3000ms latency.
 
 **`Could not determine subscription ID`**
-The subscription table format changed. Run `xray-knife subs show` and check the output — the script parses the first column as ID.
+The subscription table format may have changed. Run `xray-knife subs show` and check the output manually — the script parses the first column as the ID.
 
 **`xray config test failed`**
-Check `journalctl -u xray -n 30`. Usually a permission issue on `/var/log/xray/error.log` — fix with `sudo mkdir -p /var/log/xray && sudo chown xray:xray /var/log/xray`.
+Check `journalctl -u xray -n 30`. Usually a permission issue on `/var/log/xray/error.log` — fix with:
+```bash
+sudo mkdir -p /var/log/xray && sudo chown nobody:nogroup /var/log/xray
+```
 
 **Round 3 takes too long**
-It tests configs one by one with a speedtest. For 30 configs expect ~5 minutes. This is intentional — it's the most honest test.
+Round 3 tests configs one-by-one with a full speedtest — for 15 configs expect 3–5 minutes. This is intentional: it is the most honest, interference-free measurement.
 
 **Subscription fetch fails with DNS timeout**
-Your network may block `raw.githubusercontent.com`. Try routing through a proxy first, or use an alternative mirror URL.
+Your network may block `raw.githubusercontent.com`. Route through a proxy first, or replace `SUB_URL` with an alternative mirror.
+
+**`manualconfig.sh`: URI skipped with "unrecognised scheme"**
+The URI prefix must be one of the accepted protocols listed above. Paste the full URI including the `://` part. Lines with unrecognised schemes are reported but do not abort the run — other URIs in the file are still processed.
+
+**Dependency installer fails mid-way**
+Re-run the script — the checker will detect what is still missing and only attempt to install those. Already-installed deps are skipped.
 
 ---
 

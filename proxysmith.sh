@@ -19,8 +19,196 @@ SAVE_CONFIG="$SCRIPT_DIR/last_config.json"
 SAVE_URIS="$SCRIPT_DIR/last_configs.txt"
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── INTERACTIVE SETUP ──────────────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 DIM='\033[2m'; WHITE='\033[1;97m'; GREY='\033[0;90m'
+log()  { echo -e "${CYAN}[*]${NC} $*"; }
+ok()   { echo -e "${GREEN}[✓]${NC} $*"; }
+warn() { echo -e "${YELLOW}[!]${NC} $*"; }
+die()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
+
+# ── BANNER ────────────────────────────────────────────────────────────────────
+print_banner() {
+    echo -e "\033[0;31m"
+    cat << 'BANNER'
+  ██████╗ ██████╗  ██████╗ ██╗  ██╗██╗   ██╗███████╗███╗   ███╗██╗████████╗██╗  ██╗
+  ██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝╚██╗ ██╔╝██╔════╝████╗ ████║██║╚══██╔══╝██║  ██║
+  ██████╔╝██████╔╝██║   ██║ ╚███╔╝  ╚████╔╝ ███████╗██╔████╔██║██║   ██║   ███████║
+  ██╔═══╝ ██╔══██╗██║   ██║ ██╔██╗   ╚██╔╝  ╚════██║██║╚██╔╝██║██║   ██║   ██╔══██║
+  ██║     ██║  ██║╚██████╔╝██╔╝ ██╗   ██║   ███████║██║ ╚═╝ ██║██║   ██║   ██║  ██║
+  ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝     ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+BANNER
+
+    echo -e "\033[1;37m    The 3-Round Brutal Xray Config Builder With auto Balancer and xray Deployment\033[0m"
+    echo -e "\033[0;90m            ─────────────────────────────────────────────────────────────\033[0m"
+    echo -e "\033[0;90m            Author  :  Soroush Yasini\033[0m"
+    echo -e "\033[0;90m            Repo    :  https://github.com/soroushyasini/proxysmith\033[0m"
+    echo -e "\033[0;90m            Email   :  soroush.yasini5@gmail.com\033[0m"
+    echo -e "\033[0;90m            LinkedIn:  linkedin.com/in/soroush-yasini\033[0m"
+    echo -e "\033[0;90m            ─────────────────────────────────────────────────────────────\033[0m"
+    echo ""
+}
+print_banner
+
+# =============================================================================
+# DEPENDENCY CHECKER
+# Checks for all required tools; offers to install missing ones automatically.
+# =============================================================================
+check_and_install_deps() {
+    echo -e "\n${WHITE}  🔍  Checking dependencies${NC}"
+    echo -e "${GREY}  ──────────────────────────────────────────────────${NC}"
+
+    local missing_apt=()
+    local missing_manual=()
+    local all_ok=true
+
+    dep_status() {
+        local name="$1" found="$2"
+        if [[ "$found" == "yes" ]]; then
+            printf "  ${GREEN}[✓]${NC}  %-18s ${DIM}%s${NC}\n" "$name" "$(command -v "$name" 2>/dev/null)"
+        else
+            printf "  ${RED}[✗]${NC}  %-18s ${YELLOW}%s${NC}\n" "$name" "$3"
+            all_ok=false
+        fi
+    }
+
+    command -v xray-knife &>/dev/null \
+        && dep_status "xray-knife" "yes" \
+        || { dep_status "xray-knife" "no" "not in PATH — needs manual install"; missing_manual+=("xray-knife"); }
+
+    command -v xray &>/dev/null \
+        && dep_status "xray" "yes" \
+        || { dep_status "xray" "no" "not in PATH — needs manual install"; missing_manual+=("xray"); }
+
+    command -v python3 &>/dev/null \
+        && dep_status "python3" "yes" \
+        || { dep_status "python3" "no" "will install via apt"; missing_apt+=("python3"); }
+
+    command -v jq &>/dev/null \
+        && dep_status "jq" "yes" \
+        || { dep_status "jq" "no" "will install via apt"; missing_apt+=("jq"); }
+
+    command -v wget &>/dev/null \
+        && dep_status "wget" "yes" \
+        || { dep_status "wget" "no" "will install via apt"; missing_apt+=("wget"); }
+
+    command -v unzip &>/dev/null \
+        && dep_status "unzip" "yes" \
+        || { dep_status "unzip" "no" "will install via apt"; missing_apt+=("unzip"); }
+
+    echo -e "${GREY}  ──────────────────────────────────────────────────${NC}\n"
+
+    # All present → skip ahead
+    if [[ "$all_ok" == true ]]; then
+        ok "All dependencies satisfied."
+        echo ""
+        return 0
+    fi
+
+    # Print install plan
+    if [[ ${#missing_apt[@]} -gt 0 ]]; then
+        echo -e "  ${BOLD}Will install via apt:${NC}  ${missing_apt[*]}"
+        echo ""
+    fi
+
+    if [[ ${#missing_manual[@]} -gt 0 ]]; then
+        echo -e "  ${BOLD}Require a one-time download/install:${NC}"
+        for tool in "${missing_manual[@]}"; do
+            case "$tool" in
+                xray-knife)
+                    echo -e "\n    ${BOLD}xray-knife${NC}"
+                    echo -e "    ${DIM}wget https://github.com/lilendian0x00/xray-knife/releases/latest/download/Xray-knife-linux-64.zip${NC}"
+                    echo -e "    ${DIM}unzip → sudo mv xray-knife /usr/local/bin/ → chmod +x${NC}"
+                    ;;
+                xray)
+                    echo -e "\n    ${BOLD}xray${NC}"
+                    echo -e '    ${DIM}bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install${NC}'
+                    ;;
+            esac
+        done
+        echo ""
+    fi
+
+    read -rp "  Install missing dependencies now? [Y/n]  (Enter = yes): " do_install
+    [[ "${do_install,,}" == "n" ]] && echo "" && die "Cannot proceed without required dependencies."
+    echo ""
+
+    # ── apt packages ──────────────────────────────────────────────────────────
+    if [[ ${#missing_apt[@]} -gt 0 ]]; then
+        log "apt-get update..."
+        sudo apt-get update -qq || die "apt update failed"
+        log "Installing: ${missing_apt[*]}"
+        sudo apt-get install -y "${missing_apt[@]}" \
+            || die "apt install failed — install manually and re-run"
+        ok "Installed via apt: ${missing_apt[*]}"
+        echo ""
+    fi
+
+    # ── xray-knife ────────────────────────────────────────────────────────────
+    if [[ " ${missing_manual[*]} " == *" xray-knife "* ]]; then
+        log "Downloading xray-knife (latest release)..."
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+
+        wget -q --show-progress \
+            "https://github.com/lilendian0x00/xray-knife/releases/latest/download/Xray-knife-linux-64.zip" \
+            -O "$tmp_dir/xray-knife.zip" \
+            || die "Download failed — check your internet connection"
+
+        log "Extracting..."
+        unzip -q "$tmp_dir/xray-knife.zip" -d "$tmp_dir" \
+            || die "Unzip failed"
+
+        # The binary may land with different names depending on release packaging
+        local bin_path
+        bin_path=$(find "$tmp_dir" -maxdepth 2 -type f -iname "xray-knife" | head -1)
+        [[ -z "$bin_path" ]] && bin_path=$(find "$tmp_dir" -maxdepth 2 -type f -iname "Xray-knife" | head -1)
+        [[ -z "$bin_path" ]] && die "Could not find xray-knife binary after unzip (files: $(ls "$tmp_dir"))"
+
+        sudo mv "$bin_path" /usr/local/bin/xray-knife
+        sudo chmod +x /usr/local/bin/xray-knife
+        rm -rf "$tmp_dir"
+
+        command -v xray-knife &>/dev/null \
+            && ok "xray-knife installed → $(command -v xray-knife)" \
+            || die "xray-knife install failed — binary not found in PATH after move"
+        echo ""
+    fi
+
+    # ── xray ─────────────────────────────────────────────────────────────────
+    if [[ " ${missing_manual[*]} " == *" xray "* ]]; then
+        log "Installing xray via official installer script..."
+        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install \
+            || die "xray install script failed — check output above"
+
+        # Official installer puts xray at /usr/local/bin/xray
+        command -v xray &>/dev/null \
+            && ok "xray installed → $(command -v xray)" \
+            || die "xray not found in PATH after install — check /usr/local/bin/"
+        echo ""
+    fi
+
+    # ── final verification ────────────────────────────────────────────────────
+    log "Final dependency check..."
+    local final_ok=true
+    for cmd in xray-knife xray python3 jq; do
+        if command -v "$cmd" &>/dev/null; then
+            printf "  ${GREEN}[✓]${NC}  %s\n" "$cmd"
+        else
+            printf "  ${RED}[✗]${NC}  %-14s  ${RED}still missing after install${NC}\n" "$cmd"
+            final_ok=false
+        fi
+    done
+    echo ""
+
+    [[ "$final_ok" == true ]] || die "Some dependencies are still missing. Fix manually and re-run."
+    ok "All dependencies ready."
+    echo ""
+}
+
+check_and_install_deps
+
+# ── INTERACTIVE SETUP ─────────────────────────────────────────────────────────
 interactive_setup() {
     echo -e "\n${WHITE}  ⚙  Configure this run${NC}"
     echo -e "${GREY}  ──────────────────────────────────────────────────${NC}\n"
@@ -56,42 +244,9 @@ interactive_setup() {
     echo ""
 }
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
-log()  { echo -e "${CYAN}[*]${NC} $*"; }
-ok()   { echo -e "${GREEN}[✓]${NC} $*"; }
-warn() { echo -e "${YELLOW}[!]${NC} $*"; }
-die()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
-
-# ── BANNER ────────────────────────────────────────────────────────────────────
-print_banner() {
-    echo -e "\033[0;31m"
-    cat << 'BANNER'
-  ██████╗ ██████╗  ██████╗ ██╗  ██╗██╗   ██╗███████╗███╗   ███╗██╗████████╗██╗  ██╗
-  ██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝╚██╗ ██╔╝██╔════╝████╗ ████║██║╚══██╔══╝██║  ██║
-  ██████╔╝██████╔╝██║   ██║ ╚███╔╝  ╚████╔╝ ███████╗██╔████╔██║██║   ██║   ███████║
-  ██╔═══╝ ██╔══██╗██║   ██║ ██╔██╗   ╚██╔╝  ╚════██║██║╚██╔╝██║██║   ██║   ██╔══██║
-  ██║     ██║  ██║╚██████╔╝██╔╝ ██╗   ██║   ███████║██║ ╚═╝ ██║██║   ██║   ██║  ██║
-  ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝     ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
-BANNER
-
-    echo -e "\033[1;37m    The 3-Round Brutal Xray Config Builder With auto Balancer and xray Deployment\033[0m"
-    echo -e "\033[0;90m            ─────────────────────────────────────────────────────────────\033[0m"
-    echo -e "\033[0;90m            Author  :  Soroush Yasini\033[0m"
-    echo -e "\033[0;90m            Repo    :  https://github.com/soroushyasini/proxysmith\033[0m"
-    echo -e "\033[0;90m            Email   :  soroush.yasini5@gmail.com\033[0m"
-    echo -e "\033[0;90m            LinkedIn:  linkedin.com/in/soroush-yasini\033[0m"
-    echo -e "\033[0;90m            ─────────────────────────────────────────────────────────────\033[0m"
-    echo ""
-}
-print_banner
 interactive_setup
-# ─────────────────────────────────────────────────────────────────────────────
-for cmd in xray-knife python3 jq; do
-    command -v "$cmd" &>/dev/null || die "Missing dependency: $cmd
-    Follow the README.md for Dependency installation guide"
-done
 
+# ─────────────────────────────────────────────────────────────────────────────
 mkdir -p "$WORK_DIR"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -138,7 +293,7 @@ xray-knife http \
     --url "https://www.google.com/generate_204"
 
 [ -f "$CSV" ] || die "xray-knife did not produce a CSV file"
-TOTAL=$(( $(wc -l < "$CSV") - 1 ))   # minus header
+TOTAL=$(( $(wc -l < "$CSV") - 1 ))
 ok "Tested $TOTAL configs, results in CSV"
 
 # =============================================================================
@@ -152,11 +307,10 @@ csv.field_size_limit(10 * 1024 * 1024)
 
 csv_path = "$CSV"
 max_ping = $MAX_PING_MS
-top_n    = $TOP_N * 3   # keep 3x for round-2 testing
+top_n    = $TOP_N * 3
 out_path = "$WORK_DIR/round1_winners.txt"
 
 def uri_key(uri):
-    """Deduplicate key: proto:host:port only — different UUIDs on same server = same key."""
     try:
         base = uri.split('#')[0]
         parsed = urllib.parse.urlparse(base)
@@ -164,8 +318,9 @@ def uri_key(uri):
     except Exception:
         return uri.split('#')[0]
 
-with open(csv_path, newline="", encoding="latin-1") as f:
-    reader = csv.DictReader(f)
+with open(csv_path, encoding="latin-1", errors="replace") as raw_f:
+    clean = (line.replace("\x00", "") for line in raw_f)
+    reader = csv.DictReader(clean)
     rows = []
     seen_keys = set()
     for row in reader:
@@ -210,11 +365,17 @@ ok "Round 1: $R1_COUNT unique configs selected"
 # =============================================================================
 log "Round 2: re-testing $R1_COUNT survivors for confirmation..."
 
-# Write URIs to a temp file for xray-knife to consume
 awk -F'\t' '{print $2}' "$WORK_DIR/round1_winners.txt" > "$WORK_DIR/round1_uris.txt"
 
 CSV2="$WORK_DIR/results_round2.csv"
-xray-knife http     -f "$WORK_DIR/round1_uris.txt"     --speedtest     --sort     --type csv     -o "$CSV2"     --thread "$TEST_THREADS"     --url "https://www.google.com/generate_204"
+xray-knife http \
+    -f "$WORK_DIR/round1_uris.txt" \
+    --speedtest \
+    --sort \
+    --type csv \
+    -o "$CSV2" \
+    --thread "$TEST_THREADS" \
+    --url "https://www.google.com/generate_204"
 
 [ -f "$CSV2" ] || die "Round 2 produced no CSV"
 
@@ -234,8 +395,9 @@ def uri_key(uri):
     except Exception:
         return uri.split('#')[0]
 
-with open(csv_path, newline="", encoding="latin-1") as f:
-    reader = csv.DictReader(f)
+with open(csv_path, encoding="latin-1", errors="replace") as raw_f:
+    clean = (line.replace("\x00", "") for line in raw_f)
+    reader = csv.DictReader(clean)
     rows = []
     seen_keys = set()
     for row in reader:
@@ -308,8 +470,9 @@ def uri_key(uri):
     except Exception:
         return uri.split('#')[0]
 
-with open(csv_path, newline="", encoding="latin-1") as f:
-    reader = csv.DictReader(f)
+with open(csv_path, encoding="latin-1", errors="replace") as raw_f:
+    clean = (line.replace("\x00", "") for line in raw_f)
+    reader = csv.DictReader(clean)
     rows = []
     seen_keys = set()
     for row in reader:
@@ -347,7 +510,6 @@ PYEOF
 FINAL_COUNT=$(wc -l < "$WORK_DIR/final_winners.txt")
 ok "Final selection: $FINAL_COUNT configs survived all 3 rounds"
 
-# Overwrite winners.txt with final selection so STEP 4 uses it
 cp "$WORK_DIR/final_winners.txt" "$WORK_DIR/winners.txt"
 awk -F'\t' '{print $2}' "$WORK_DIR/winners.txt" > "$SAVE_URIS"
 ok "URIs saved to $SAVE_URIS"
@@ -386,11 +548,8 @@ for line in lines:
             errors.append(f"empty output for {uri[:60]}")
             continue
 
-        # xray-knife parse --json may wrap outbound in a full config or return
-        # just the outbound object — handle both
         obj = json.loads(raw)
 
-        # If it's a full config, extract the first non-freedom/blackhole outbound
         if 'outbounds' in obj:
             ob = next(
                 (o for o in obj['outbounds']
@@ -407,7 +566,6 @@ for line in lines:
             errors.append(f"no usable outbound in {uri[:60]}")
             continue
 
-        # Assign clean tag
         proto_counters[proto] = proto_counters.get(proto, 0) + 1
         tag = f"{proto}_{proto_counters[proto]:02d}"
         ob['tag'] = tag
@@ -450,7 +608,6 @@ data = json.load(open("$OUTBOUNDS_JSON"))
 outbounds = data['outbounds']
 tags = data['tags']
 
-# Append fixed outbounds
 outbounds.append({"tag": "direct",  "protocol": "freedom",   "settings": {"domainStrategy": "UseIPv4"}})
 outbounds.append({"tag": "blocked", "protocol": "blackhole", "settings": {}})
 
@@ -520,7 +677,6 @@ print(f"  Tags      : {', '.join(tags)}")
 print(f"  Fallback  : {tags[0]}")
 PYEOF
 
-# Quick JSON validity check
 python3 -c "import json; json.load(open('$FINAL_CONFIG'))"
 ok "config.json is valid JSON"
 cp "$FINAL_CONFIG" "$SAVE_CONFIG"

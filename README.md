@@ -51,13 +51,14 @@ Only configs that survive all 3 rounds make it into the final `config.json`. The
 
 | Dependency | Purpose |
 |---|---|
+| `git` | will fetch the necessary packages during auto-install |
 | `xray-knife` | Subscription fetch + proxy testing |
 | `xray` | Config validation + runtime |
 | `python3` | CSV parsing + JSON assembly |
 | `jq` | JSON utility (used for validation) |
 | `wget` | xray-knife download during auto-install |
 | `unzip` | xray-knife extraction during auto-install |
-| `git` | will install if it's not already during auto-install |
+
 
 > **You do not need to install these manually.** Both scripts include a built-in dependency checker that detects what is missing, shows you the install plan, and asks for confirmation before running. See [Dependency auto-installer](#dependency-auto-installer) below.
 

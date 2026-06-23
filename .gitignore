@@ -1,0 +1,16 @@
+android/app/libs/*.aar
+
+# Flutter/Android build artifacts
+android/build/
+android/.gradle/
+android/app/build/
+android/.dart_tool/
+android/.flutter-plugins
+android/.flutter-plugins-dependencies
+
+# Go build artifacts
+go/proxysmith
+go/results*.txt
+
+# General
+*.DS_Store

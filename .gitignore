@@ -13,4 +13,5 @@ go/proxysmith
 go/results*.txt
 
 # General
-*.DS_Store
+*.DS_Storeandroid/key.properties
+*.jks

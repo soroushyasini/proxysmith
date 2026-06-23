@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -36,20 +37,37 @@ class PipelineScreen extends StatefulWidget {
 }
 
 class _PipelineScreenState extends State<PipelineScreen> {
-  final _subUrlCtrl  = TextEditingController(
+  final _subUrlCtrl = TextEditingController(
     text: 'https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt',
   );
   final _sampleCtrl  = TextEditingController(text: '5');
   final _maxPingCtrl = TextEditingController(text: '8000');
 
-  bool   _running    = false;
-  String _status     = 'ready';
-  double _progress   = 0;
-  int    _round      = 0;
-  int    _done       = 0;
-  int    _total      = 0;
+  bool   _running  = false;
+  String _status   = 'ready';
+  double _progress = 0;
+  int    _round    = 0;
+  int    _done     = 0;
+  int    _total    = 0;
 
   List<Map<String, dynamic>> _results = [];
+
+  // FIX: Store the stream subscription so we can cancel it properly.
+  // Previously a new listener was stacked on every Run tap — after 3 runs
+  // you'd have 3 listeners all firing setState simultaneously.
+  StreamSubscription? _eventSub;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────
+  // FIX: dispose() was completely missing. TextEditingControllers and the
+  // stream subscription would leak on every screen rebuild / navigator pop.
+  @override
+  void dispose() {
+    _eventSub?.cancel();
+    _subUrlCtrl.dispose();
+    _sampleCtrl.dispose();
+    _maxPingCtrl.dispose();
+    super.dispose();
+  }
 
   // ── Start ──────────────────────────────────────────────────────────────
   Future<void> _start() async {
@@ -63,34 +81,44 @@ class _PipelineScreenState extends State<PipelineScreen> {
       _total    = 0;
     });
 
-    // Listen to progress events
-    _eventChannel.receiveBroadcastStream().listen((event) {
-      final e = Map<String, dynamic>.from(event as Map);
-      final type = e['type'] as String;
-      final data = e['data'];
+    // FIX: Cancel any existing subscription before creating a new one.
+    await _eventSub?.cancel();
+    _eventSub = _eventChannel.receiveBroadcastStream().listen(
+      (event) {
+        final e    = Map<String, dynamic>.from(event as Map);
+        final type = e['type'] as String;
+        final data = e['data'];
 
-      setState(() {
-        switch (type) {
-          case 'status':
-            _status = data as String;
-          case 'fetched':
-            _total  = data as int;
-            _status = 'fetched $_total URIs';
-          case 'progress':
-            final p = Map<String, dynamic>.from(data as Map);
-            _round  = p['round'] as int;
-            _done   = p['done']  as int;
-            _total  = p['total'] as int;
-            _status = 'R$_round  $_done / $_total';
-            _progress = switch (_round) {
-              1 => (_done / _total) * 0.7,
-              2 => 0.7 + (_done / _total) * 0.2,
-              3 => 0.9 + (_done / _total) * 0.1,
-              _ => _progress,
-            };
-        }
-      });
-    });
+        // Guard: widget might be unmounted before all events arrive
+        if (!mounted) return;
+
+        setState(() {
+          switch (type) {
+            case 'status':
+              _status = data as String;
+            case 'fetched':
+              _total  = data as int;
+              _status = 'fetched $_total URIs';
+            case 'progress':
+              final p = Map<String, dynamic>.from(data as Map);
+              _round  = p['round'] as int;
+              _done   = p['done']  as int;
+              _total  = p['total'] as int;
+              _status = 'R$_round  $_done / $_total';
+              _progress = switch (_round) {
+                1 => (_done / _total) * 0.7,
+                2 => 0.7 + (_done / _total) * 0.2,
+                3 => 0.9 + (_done / _total) * 0.1,
+                _ => _progress,
+              };
+          }
+        });
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _status = 'stream error: $error');
+      },
+    );
 
     try {
       final raw = await _methodChannel.invokeMethod('startPipeline', {
@@ -99,23 +127,34 @@ class _PipelineScreenState extends State<PipelineScreen> {
         'maxPingMs': int.tryParse(_maxPingCtrl.text) ?? 8000,
       });
 
+      if (!mounted) return;
+
       if (raw != null) {
-        final list = (raw as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        final list = (raw as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
         setState(() {
           _results  = list;
           _progress = 1.0;
           _status   = 'done — ${list.length} results';
         });
+      } else {
+        // null means the pipeline was stopped by the user
+        setState(() => _status = 'stopped');
       }
     } on PlatformException catch (e) {
-      setState(() => _status = 'error: ${e.message}');
+      if (!mounted) return;
+      // FIX: e.message can be null; fall back to e.code so the user always
+      // sees a meaningful error string instead of "error: null"
+      setState(() => _status = 'error: ${e.message ?? e.code}');
     } finally {
-      setState(() => _running = false);
+      if (mounted) setState(() => _running = false);
     }
   }
 
   Future<void> _stop() async {
     await _methodChannel.invokeMethod('stopPipeline');
+    if (!mounted) return;
     setState(() { _running = false; _status = 'stopped'; });
   }
 

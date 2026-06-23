@@ -1,8 +1,8 @@
 package ir.proxysmith.proxysmith_flutter
 
 import android.util.Base64
+import java.net.HttpURLConnection
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 
 object SubscriptionFetcher {
 
@@ -15,8 +15,8 @@ object SubscriptionFetcher {
      * Fetches a subscription URL, decodes it, filters valid URIs,
      * and returns a uniformly sampled subset.
      *
-     * @param subURL   The subscription URL to fetch
-     * @param sampleN  1 = test all, 5 = test ~20%, 10 = test ~10%
+     * @param subURL   The subscription URL to fetch (http or https)
+     * @param sampleN  1 = test all, 5 = test ~20%, 10 = test ~10%, 0 = test all
      * @param timeoutMs HTTP timeout in milliseconds (default 30s)
      * @return List of proxy URI strings
      */
@@ -31,21 +31,28 @@ object SubscriptionFetcher {
             VALID_SCHEMES.any { line.startsWith(it) }
         }
         if (valid.isEmpty()) return emptyList()
+        // FIX: Guard sampleN <= 0 — previously 0 would cause an infinite loop
+        // in uniformSample because the bucket index never advanced.
         if (sampleN <= 1) return valid
         return uniformSample(valid, sampleN)
     }
 
     // ── HTTP GET ───────────────────────────────────────────────────────────
+    // FIX: Was hardcoded to HttpsURLConnection, crashing on http:// URLs with
+    // a ClassCastException. Now uses the base HttpURLConnection which works
+    // for both http and https (the JVM upcasts to HttpsURLConnection automatically
+    // for https:// URLs under the hood).
     private fun httpGet(url: String, timeoutMs: Int): String {
-        val conn = URL(url).openConnection() as HttpsURLConnection
+        val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = timeoutMs
-        conn.readTimeout = timeoutMs
-        conn.requestMethod = "GET"
+        conn.readTimeout    = timeoutMs
+        conn.requestMethod  = "GET"
         conn.setRequestProperty("User-Agent", "ProxySmith/1.0")
+        conn.instanceFollowRedirects = true
         try {
             conn.connect()
             val code = conn.responseCode
-            if (code != 200) throw Exception("HTTP $code from $url")
+            if (code !in 200..299) throw Exception("HTTP $code from $url")
             return conn.inputStream.bufferedReader().readText()
         } finally {
             conn.disconnect()

@@ -16,6 +16,10 @@ class MainActivity : FlutterActivity() {
     private var progressSink: EventChannel.EventSink? = null
     private var pipelineJob: Job? = null
 
+    // FIX: Single lifecycle-aware scope instead of creating new scopes inline.
+    // SupervisorJob means a failed child doesn't cancel the whole scope.
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -36,14 +40,16 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
 
                     "startPipeline" -> {
-                        val subUrl     = call.argument<String>("subUrl") ?: ""
-                        val sampleN    = call.argument<Int>("sampleN") ?: 5
-                        val maxPingMs  = call.argument<Int>("maxPingMs")?.toLong() ?: 8000L
-                        val testUrl    = call.argument<String>("testUrl")
+                        val subUrl    = call.argument<String>("subUrl") ?: ""
+                        val sampleN   = call.argument<Int>("sampleN") ?: 5
+                        val maxPingMs = call.argument<Int>("maxPingMs")?.toLong() ?: 8000L
+                        val testUrl   = call.argument<String>("testUrl")
                             ?: "https://www.google.com/generate_204"
 
+                        // Cancel any existing pipeline before starting a new one
                         pipelineJob?.cancel()
-                        pipelineJob = CoroutineScope(Dispatchers.IO).launch {
+                        // FIX: Use the lifecycle-aware scope, not a throwaway one
+                        pipelineJob = scope.launch {
                             runPipeline(subUrl, sampleN, maxPingMs, testUrl, result)
                         }
                     }
@@ -56,6 +62,13 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    // FIX: Cancel all coroutines when the Activity is destroyed.
+    // Without this, background work outlives the Activity on real devices.
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
     }
 
     // ── Pipeline runner ────────────────────────────────────────────────────
@@ -71,6 +84,13 @@ class MainActivity : FlutterActivity() {
             sendEvent("status", "fetching subscription...")
             val uris = SubscriptionFetcher.fetchAndSample(subUrl, sampleN)
             sendEvent("fetched", uris.size)
+
+            if (uris.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    result.error("NO_URIS", "No valid proxy URIs found in subscription.", null)
+                }
+                return
+            }
 
             // 2. Pipeline with progress
             val top10 = Pipeline.run(
@@ -97,16 +117,21 @@ class MainActivity : FlutterActivity() {
             sendEvent("status", "done")
 
         } catch (e: CancellationException) {
+            // Don't treat cancellation as an error — it's user-initiated via stopPipeline
             sendEvent("status", "stopped")
             withContext(Dispatchers.Main) { result.success(null) }
         } catch (e: Exception) {
             sendEvent("status", "error: ${e.message}")
-            withContext(Dispatchers.Main) { result.error("PIPELINE_ERROR", e.message, null) }
+            withContext(Dispatchers.Main) {
+                result.error("PIPELINE_ERROR", e.message ?: "Unknown error", null)
+            }
         }
     }
 
+    // FIX: Use the shared scope instead of spawning a new CoroutineScope each call.
+    // The old code created a new untracked scope on every progress event (potentially hundreds).
     private fun sendEvent(type: String, data: Any?) {
-        CoroutineScope(Dispatchers.Main).launch {
+        scope.launch(Dispatchers.Main) {
             progressSink?.success(mapOf("type" to type, "data" to data))
         }
     }

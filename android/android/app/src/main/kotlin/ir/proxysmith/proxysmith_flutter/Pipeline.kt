@@ -32,42 +32,39 @@ object Pipeline {
 
         // Round 1: full sampled list, high concurrency, hard ping cutoff
         val r1 = runRound(
-            label = "Round 1",
-            uris = uris,
+            uris        = uris,
             concurrency = concurrency,
-            keepTop = 60,
-            maxPingMs = maxPingMs,
-            testUrl = testUrl,
-            round = 1,
-            onProgress = onProgress
+            keepTop     = 60,
+            maxPingMs   = maxPingMs,
+            testUrl     = testUrl,
+            round       = 1,
+            onProgress  = onProgress
         )
 
         if (r1.isEmpty()) return emptyList()
 
         // Round 2: survivors, moderate concurrency, no ping cutoff
         val r2 = runRound(
-            label = "Round 2",
-            uris = r1.map { it.uri },
+            uris        = r1.map { it.uri },
             concurrency = 5,
-            keepTop = 30,
-            maxPingMs = 0L,
-            testUrl = testUrl,
-            round = 2,
-            onProgress = onProgress
+            keepTop     = 30,
+            maxPingMs   = 0L,
+            testUrl     = testUrl,
+            round       = 2,
+            onProgress  = onProgress
         )
 
         if (r2.isEmpty()) return emptyList()
 
         // Round 3: single-threaded, most honest measurement
         val r3 = runRound(
-            label = "Round 3",
-            uris = r2.map { it.uri },
+            uris        = r2.map { it.uri },
             concurrency = 1,
-            keepTop = 10,
-            maxPingMs = 0L,
-            testUrl = testUrl,
-            round = 3,
-            onProgress = onProgress
+            keepTop     = 10,
+            maxPingMs   = 0L,
+            testUrl     = testUrl,
+            round       = 3,
+            onProgress  = onProgress
         )
 
         return r3
@@ -75,7 +72,6 @@ object Pipeline {
 
     // ── SINGLE ROUND ───────────────────────────────────────────────────────
     private suspend fun runRound(
-        label: String,
         uris: List<String>,
         concurrency: Int,
         keepTop: Int,
@@ -86,13 +82,22 @@ object Pipeline {
     ): List<Candidate> = coroutineScope {
 
         val semaphore = Semaphore(concurrency)
-        val done = java.util.concurrent.atomic.AtomicInteger(0)
-        val total = uris.size
+        val done      = java.util.concurrent.atomic.AtomicInteger(0)
+        val total     = uris.size
+
+        // FIX: Wrap testUri (a blocking libv2ray call) in withTimeoutOrNull so
+        // that a single hanging proxy can't stall the entire round forever.
+        // We give each test maxPingMs + 2s grace on top of the cutoff,
+        // or a flat 12s cap when no cutoff is set (rounds 2 & 3).
+        val timeoutMs = if (maxPingMs > 0) maxPingMs + 2_000L else 12_000L
 
         val results: List<Candidate> = uris.map { uri ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val candidate = testUri(uri, testUrl)
+                    val candidate = withTimeoutOrNull(timeoutMs) {
+                        testUri(uri, testUrl)
+                    } ?: Candidate(uri, -1, "timeout after ${timeoutMs}ms")
+
                     val d = done.incrementAndGet()
                     onProgress?.invoke(d, total, round)
                     candidate

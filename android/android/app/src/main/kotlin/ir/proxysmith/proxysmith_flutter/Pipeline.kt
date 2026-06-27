@@ -5,15 +5,22 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
 data class Candidate(
-    val uri: String,
-    val ms: Long,       // -1 = failed
-    val error: String = ""
+    val uri:   String,
+    val ms:    Long,        // -1 = failed / timed-out
+    val error: String = ""  // human-readable reason for failures
 )
 
 object Pipeline {
 
     /**
      * Runs the full 3-round elimination pipeline.
+     *
+     * Round 1 — full sampled list, high concurrency, hard ping cutoff.
+     *           Keeps the top 60 fastest.
+     * Round 2 — survivors only, moderate concurrency, no cutoff.
+     *           Keeps the top 30.
+     * Round 3 — single-threaded, most honest/stable measurement.
+     *           Keeps the top 10.
      *
      * @param uris        Sampled URI list from SubscriptionFetcher
      * @param concurrency Round 1 concurrency (default 20)
@@ -23,14 +30,14 @@ object Pipeline {
      * @return Top 10 candidates sorted by latency ascending
      */
     suspend fun run(
-        uris: List<String>,
-        concurrency: Int = 20,
-        maxPingMs: Long = 8000L,
-        testUrl: String = "https://www.google.com/generate_204",
-        onProgress: ((done: Int, total: Int, round: Int) -> Unit)? = null
+        uris:        List<String>,
+        concurrency: Int    = 20,
+        maxPingMs:   Long   = 8000L,
+        testUrl:     String = "https://www.google.com/generate_204",
+        onProgress:  ((done: Int, total: Int, round: Int) -> Unit)? = null
     ): List<Candidate> {
 
-        // Round 1: full sampled list, high concurrency, hard ping cutoff
+        // Round 1
         val r1 = runRound(
             uris        = uris,
             concurrency = concurrency,
@@ -40,10 +47,9 @@ object Pipeline {
             round       = 1,
             onProgress  = onProgress
         )
-
         if (r1.isEmpty()) return emptyList()
 
-        // Round 2: survivors, moderate concurrency, no ping cutoff
+        // Round 2
         val r2 = runRound(
             uris        = r1.map { it.uri },
             concurrency = 5,
@@ -53,11 +59,10 @@ object Pipeline {
             round       = 2,
             onProgress  = onProgress
         )
-
         if (r2.isEmpty()) return emptyList()
 
-        // Round 3: single-threaded, most honest measurement
-        val r3 = runRound(
+        // Round 3
+        return runRound(
             uris        = r2.map { it.uri },
             concurrency = 1,
             keepTop     = 10,
@@ -66,18 +71,16 @@ object Pipeline {
             round       = 3,
             onProgress  = onProgress
         )
-
-        return r3
     }
 
     // ── SINGLE ROUND ───────────────────────────────────────────────────────
     private suspend fun runRound(
-        uris: List<String>,
+        uris:       List<String>,
         concurrency: Int,
-        keepTop: Int,
-        maxPingMs: Long,
-        testUrl: String,
-        round: Int,
+        keepTop:    Int,
+        maxPingMs:  Long,
+        testUrl:    String,
+        round:      Int,
         onProgress: ((Int, Int, Int) -> Unit)?
     ): List<Candidate> = coroutineScope {
 
@@ -85,15 +88,15 @@ object Pipeline {
         val done      = java.util.concurrent.atomic.AtomicInteger(0)
         val total     = uris.size
 
-        // FIX: Wrap testUri (a blocking libv2ray call) in withTimeoutOrNull so
-        // that a single hanging proxy can't stall the entire round forever.
-        // We give each test maxPingMs + 2s grace on top of the cutoff,
-        // or a flat 12s cap when no cutoff is set (rounds 2 & 3).
+        // Per-URI timeout: give maxPingMs + 2 s grace so the cutoff fires
+        // before the coroutine timeout, or a flat 12 s cap for rounds 2 & 3.
         val timeoutMs = if (maxPingMs > 0) maxPingMs + 2_000L else 12_000L
 
         val results: List<Candidate> = uris.map { uri ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
+                    // withTimeoutOrNull ensures a single hanging proxy can't
+                    // stall the whole round indefinitely
                     val candidate = withTimeoutOrNull(timeoutMs) {
                         testUri(uri, testUrl)
                     } ?: Candidate(uri, -1, "timeout after ${timeoutMs}ms")
@@ -105,23 +108,25 @@ object Pipeline {
             }
         }.awaitAll()
 
-        // Filter: keep only passing results within ping cutoff
-        val passing = results.filter { c ->
-            c.ms > 0 && (maxPingMs <= 0 || c.ms <= maxPingMs)
-        }
-
-        // Sort by latency, keep top N
-        passing.sortedBy { it.ms }.take(keepTop)
+        // Keep only successful measurements within the ping cutoff
+        results
+            .filter { c -> c.ms > 0 && (maxPingMs <= 0 || c.ms <= maxPingMs) }
+            .sortedBy { it.ms }
+            .take(keepTop)
     }
 
     // ── SINGLE URI TEST ────────────────────────────────────────────────────
     private fun testUri(uri: String, testUrl: String): Candidate {
+        // Step 1: parse URI → libv2ray outbound config JSON
         val outbound = try {
             UriParser.parseURIToOutbound(uri)
         } catch (e: Exception) {
-            return Candidate(uri, -1, "parse error: ${e.message}")
+            // Include the URI scheme in the error so logs are easier to triage
+            val scheme = uri.substringBefore("://").ifEmpty { "unknown" }
+            return Candidate(uri, -1, "[$scheme] parse error: ${e.message}")
         }
 
+        // Step 2: wrap in a minimal v2ray config and measure latency
         val configJson = """
         {
           "log": { "loglevel": "none" },

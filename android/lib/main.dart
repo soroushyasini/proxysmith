@@ -37,7 +37,7 @@ class PipelineScreen extends StatefulWidget {
 }
 
 class _PipelineScreenState extends State<PipelineScreen> {
-  final _subUrlCtrl = TextEditingController(
+  final _subUrlCtrl  = TextEditingController(
     text: 'https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt',
   );
   final _sampleCtrl  = TextEditingController(text: '5');
@@ -50,16 +50,14 @@ class _PipelineScreenState extends State<PipelineScreen> {
   int    _done     = 0;
   int    _total    = 0;
 
+  // Change #5 (Flutter side) — track whether a partial-result warning was fired
+  // so the UI can show a dismissible warning banner above the results list.
+  String? _warningMessage;
+
   List<Map<String, dynamic>> _results = [];
 
-  // FIX: Store the stream subscription so we can cancel it properly.
-  // Previously a new listener was stacked on every Run tap — after 3 runs
-  // you'd have 3 listeners all firing setState simultaneously.
   StreamSubscription? _eventSub;
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────
-  // FIX: dispose() was completely missing. TextEditingControllers and the
-  // stream subscription would leak on every screen rebuild / navigator pop.
   @override
   void dispose() {
     _eventSub?.cancel();
@@ -72,16 +70,16 @@ class _PipelineScreenState extends State<PipelineScreen> {
   // ── Start ──────────────────────────────────────────────────────────────
   Future<void> _start() async {
     setState(() {
-      _running  = true;
-      _status   = 'starting...';
-      _progress = 0;
-      _results  = [];
-      _round    = 0;
-      _done     = 0;
-      _total    = 0;
+      _running        = true;
+      _status         = 'starting...';
+      _progress       = 0;
+      _results        = [];
+      _round          = 0;
+      _done           = 0;
+      _total          = 0;
+      _warningMessage = null;   // clear any previous warning
     });
 
-    // FIX: Cancel any existing subscription before creating a new one.
     await _eventSub?.cancel();
     _eventSub = _eventChannel.receiveBroadcastStream().listen(
       (event) {
@@ -89,7 +87,6 @@ class _PipelineScreenState extends State<PipelineScreen> {
         final type = e['type'] as String;
         final data = e['data'];
 
-        // Guard: widget might be unmounted before all events arrive
         if (!mounted) return;
 
         setState(() {
@@ -111,6 +108,9 @@ class _PipelineScreenState extends State<PipelineScreen> {
                 3 => 0.9 + (_done / _total) * 0.1,
                 _ => _progress,
               };
+            // Change #5 — warning event from partial-result fallback
+            case 'warning':
+              _warningMessage = data as String;
           }
         });
       },
@@ -139,14 +139,21 @@ class _PipelineScreenState extends State<PipelineScreen> {
           _status   = 'done — ${list.length} results';
         });
       } else {
-        // null means the pipeline was stopped by the user
         setState(() => _status = 'stopped');
       }
     } on PlatformException catch (e) {
       if (!mounted) return;
-      // FIX: e.message can be null; fall back to e.code so the user always
-      // sees a meaningful error string instead of "error: null"
-      setState(() => _status = 'error: ${e.message ?? e.code}');
+      // Change #6 (Flutter side) — map the richer error codes to
+      // human-readable status strings so the user sees an actionable message.
+      final message = switch (e.code) {
+        'EMPTY_BODY'       => 'subscription URL returned empty response',
+        'DECODE_FAILURE'   => 'could not decode subscription (login page?)',
+        'NO_VALID_SCHEMES' => 'no supported proxy types in subscription',
+        'NETWORK_ERROR'    => 'network error: ${e.message ?? "check connection"}',
+        'PIPELINE_TIMEOUT' => 'pipeline timed out (10 min limit)',
+        _                  => e.message ?? e.code,
+      };
+      setState(() => _status = 'error: $message');
     } finally {
       if (mounted) setState(() => _running = false);
     }
@@ -186,6 +193,12 @@ class _PipelineScreenState extends State<PipelineScreen> {
               _progressRow(),
               const SizedBox(height: 12),
               _runButton(),
+              // Change #5 — warning banner, shown only when a partial-result
+              // fallback occurred. Dismissible so it doesn't eat vertical space.
+              if (_warningMessage != null) ...[
+                const SizedBox(height: 8),
+                _warningBanner(_warningMessage!),
+              ],
               const SizedBox(height: 16),
               _resultsHeader(),
               const SizedBox(height: 8),
@@ -306,6 +319,34 @@ class _PipelineScreenState extends State<PipelineScreen> {
         ),
       ),
       child: Text(_running ? 'STOP' : 'RUN PIPELINE'),
+    ),
+  );
+
+  // Change #5 — warning banner widget
+  Widget _warningBanner(String message) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    color: const Color(0xFF2D1B00),   // dark amber background
+    child: Row(
+      children: [
+        const Icon(Icons.warning_amber_rounded,
+          color: Color(0xFFD29922), size: 14),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(message,
+            style: const TextStyle(
+              color: Color(0xFFD29922),
+              fontSize: 10,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+        GestureDetector(
+          onTap: () => setState(() => _warningMessage = null),
+          child: const Icon(Icons.close,
+            color: Color(0xFF8B949E), size: 14),
+        ),
+      ],
     ),
   );
 

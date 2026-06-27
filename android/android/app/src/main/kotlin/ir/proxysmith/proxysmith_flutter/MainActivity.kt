@@ -11,19 +11,25 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val METHOD_CHANNEL = "ir.proxysmith/pipeline"
         const val EVENT_CHANNEL  = "ir.proxysmith/progress"
+
+        // Change #4 — overall pipeline timeout
+        // Hard cap on the entire pipeline (fetch + all rounds).
+        // If libv2ray hangs internally or the network stack freezes, the
+        // pipeline would otherwise run forever — the user's only escape is
+        // the STOP button, which requires the UI to remain responsive.
+        // 10 minutes is generous: typical runs on 200-URI samples finish in
+        // under 3 minutes. This is purely a safety net.
+        private const val PIPELINE_HARD_TIMEOUT_MS = 10 * 60 * 1_000L  // 10 min
     }
 
     private var progressSink: EventChannel.EventSink? = null
     private var pipelineJob:  Job? = null
 
-    // Single lifecycle-aware scope. SupervisorJob means a failed child
-    // coroutine doesn't cancel the whole scope.
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // ── Progress stream → Flutter ──────────────────────────────────────
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(args: Any?, sink: EventChannel.EventSink?) {
@@ -34,7 +40,6 @@ class MainActivity : FlutterActivity() {
                 }
             })
 
-        // ── Method calls from Flutter ──────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -45,22 +50,12 @@ class MainActivity : FlutterActivity() {
                         val testUrl   = call.argument<String>("testUrl")
                             ?: "https://www.google.com/generate_204"
 
-                        // TODO (UX pass): Flutter currently sends sampleN (legacy).
-                        // Once the UI is updated to expose testCount, replace this
-                        // mapping with: call.argument<Int>("testCount") ?: 200
-                        //
-                        // For now we accept both params and prefer testCount if present.
                         val testCount = call.argument<Int>("testCount")
                             ?: run {
-                                // Legacy sampleN → convert to approximate testCount.
-                                // sampleN=5 on a 8000-URI list ≈ 1600 tests, which
-                                // is too many. Default to 200 when only sampleN given.
                                 val sampleN = call.argument<Int>("sampleN") ?: 5
-                                // A sampleN of 1 means "test all" → pass 0 (test all)
                                 if (sampleN <= 1) 0 else 200
                             }
 
-                        // Cancel any running pipeline before starting a new one
                         pipelineJob?.cancel()
                         pipelineJob = scope.launch {
                             runPipeline(subUrl, testCount, maxPingMs, testUrl, result)
@@ -77,8 +72,6 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    // Cancel all coroutines when the Activity is destroyed to avoid
-    // background work outliving the Activity on real devices.
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
@@ -93,41 +86,106 @@ class MainActivity : FlutterActivity() {
         result:    MethodChannel.Result
     ) {
         try {
-            // 1. Fetch subscription and sample down to testCount URIs
-            sendEvent("status", "fetching subscription...")
-            val uris = SubscriptionFetcher.fetchAndSample(subUrl, testCount)
-            sendEvent("fetched", uris.size)
+            // Change #4 — overall pipeline timeout wraps everything
+            withTimeout(PIPELINE_HARD_TIMEOUT_MS) {
 
-            if (uris.isEmpty()) {
-                withContext(Dispatchers.Main) {
-                    result.error("NO_URIS", "No valid proxy URIs found in subscription.", null)
+                // 1. Fetch subscription
+                sendEvent("status", "fetching subscription...")
+
+                // Change #6 — pattern-match on typed FetchResult for actionable errors
+                val fetchResult = SubscriptionFetcher.fetchAndSample(subUrl, testCount)
+
+                val uris: List<String> = when (fetchResult) {
+                    is FetchResult.Success -> fetchResult.uris
+
+                    is FetchResult.EmptyBody -> {
+                        withContext(Dispatchers.Main) {
+                            result.error(
+                                "EMPTY_BODY",
+                                "The subscription URL returned an empty response. " +
+                                "Check the URL is correct and the server is up.",
+                                null
+                            )
+                        }
+                        return@withTimeout
+                    }
+
+                    is FetchResult.DecodeFailure -> {
+                        withContext(Dispatchers.Main) {
+                            result.error(
+                                "DECODE_FAILURE",
+                                "The subscription content could not be decoded. " +
+                                "It may be a login page, HTML error, or an unsupported encoding.",
+                                null
+                            )
+                        }
+                        return@withTimeout
+                    }
+
+                    is FetchResult.NoValidSchemes -> {
+                        withContext(Dispatchers.Main) {
+                            result.error(
+                                "NO_VALID_SCHEMES",
+                                "The subscription was decoded but contains no supported proxy types. " +
+                                "Supported: VMess, VLESS, Trojan, Shadowsocks, TUIC, Hysteria2.",
+                                null
+                            )
+                        }
+                        return@withTimeout
+                    }
+
+                    is FetchResult.NetworkError -> {
+                        withContext(Dispatchers.Main) {
+                            result.error(
+                                "NETWORK_ERROR",
+                                "Could not reach the subscription server after 3 attempts: " +
+                                fetchResult.message,
+                                null
+                            )
+                        }
+                        return@withTimeout
+                    }
                 }
-                return
+
+                sendEvent("fetched", uris.size)
+
+                // 2. Run pipeline with partial-result warning callback
+                val top10 = Pipeline.run(
+                    uris       = uris,
+                    maxPingMs  = maxPingMs,
+                    testUrl    = testUrl,
+                    onProgress = { done, total, round ->
+                        sendEvent("progress", mapOf(
+                            "done"  to done,
+                            "total" to total,
+                            "round" to round
+                        ))
+                    },
+                    // Change #5 — forward partial-result warnings to Flutter
+                    onWarning  = { warning ->
+                        sendEvent("warning", warning.message)
+                    }
+                )
+
+                // 3. Return results
+                val resultList = top10.map { c ->
+                    mapOf("uri" to c.uri, "ms" to c.ms)
+                }
+                withContext(Dispatchers.Main) { result.success(resultList) }
+                sendEvent("status", "done")
             }
 
-            // 2. Run 3-round elimination pipeline with live progress events
-            val top10 = Pipeline.run(
-                uris       = uris,
-                maxPingMs  = maxPingMs,
-                testUrl    = testUrl,
-                onProgress = { done, total, round ->
-                    sendEvent("progress", mapOf(
-                        "done"  to done,
-                        "total" to total,
-                        "round" to round
-                    ))
-                }
-            )
-
-            // 3. Return results to Flutter
-            val resultList = top10.map { c ->
-                mapOf("uri" to c.uri, "ms" to c.ms)
+        } catch (e: TimeoutCancellationException) {
+            // Change #4 — overall timeout fired
+            sendEvent("status", "pipeline timed out after ${PIPELINE_HARD_TIMEOUT_MS / 60_000} minutes")
+            withContext(Dispatchers.Main) {
+                result.error(
+                    "PIPELINE_TIMEOUT",
+                    "Pipeline exceeded the ${PIPELINE_HARD_TIMEOUT_MS / 60_000}-minute safety limit and was stopped.",
+                    null
+                )
             }
-            withContext(Dispatchers.Main) { result.success(resultList) }
-            sendEvent("status", "done")
-
         } catch (e: CancellationException) {
-            // User-initiated stop — not an error
             sendEvent("status", "stopped")
             withContext(Dispatchers.Main) { result.success(null) }
         } catch (e: Exception) {
@@ -138,9 +196,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Sends a typed event to Flutter via the EventChannel.
-    // Uses the shared scope (not a throwaway one) so these are tracked
-    // and cancelled cleanly on destroy.
     private fun sendEvent(type: String, data: Any?) {
         scope.launch(Dispatchers.Main) {
             progressSink?.success(mapOf("type" to type, "data" to data))

@@ -123,8 +123,8 @@ class _PipelineScreenState extends State<PipelineScreen> {
     try {
       final raw = await _methodChannel.invokeMethod('startPipeline', {
         'subUrl'   : _subUrlCtrl.text.trim(),
-        'sampleN'  : int.tryParse(_sampleCtrl.text)  ?? 5,
-        'maxPingMs': int.tryParse(_maxPingCtrl.text) ?? 8000,
+        'Configs to test'  : int.tryParse(_sampleCtrl.text)  ?? 200,
+        'maxPingMs': int.tryParse(_maxPingCtrl.text) ?? 5000,
       });
 
       if (!mounted) return;

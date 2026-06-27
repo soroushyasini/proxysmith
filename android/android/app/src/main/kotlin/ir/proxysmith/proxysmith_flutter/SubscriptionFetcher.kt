@@ -15,19 +15,31 @@ object SubscriptionFetcher {
      * Fetches a subscription URL, decodes it, filters valid proxy URIs,
      * and returns a uniformly sampled subset.
      *
+     * Sampling model (v1.2.0):
+     *   The caller passes [testCount] — the desired number of URIs to test.
+     *   We compute sampleN = totalValid / testCount internally.
+     *   This is more intuitive than a raw "every Nth entry" sampleN param,
+     *   especially for subscription lists that range from 6 000 to 10 000 configs.
+     *
+     *   Examples (list = 8 000 URIs):
+     *     testCount = 100  → sampleN = 80  → test ~100 URIs  (~1.3%)
+     *     testCount = 300  → sampleN = 26  → test ~300 URIs  (~3.8%)
+     *     testCount = 0    → test everything (sampleN = 1)
+     *
+     * TODO (UX pass): expose testCount to the user via a slider or text field
+     *   replacing the current "SAMPLE RATE" input. The backend is ready;
+     *   the Flutter UI still sends sampleN for now (mapped via testCount below).
+     *
      * @param subURL    The subscription URL to fetch (http or https)
-     * @param sampleN   Bucket size for uniform sampling.
-     *                  1 or 0 = use every URI; 5 = ~20%; 10 = ~10%
+     * @param testCount How many URIs to test. 0 = test all. (replaces sampleN)
      * @param timeoutMs HTTP connect + read timeout in milliseconds (default 30s)
-     * @return List of proxy URI strings ready to test
+     * @return List of proxy URI strings ready to pass into the pipeline
      */
     fun fetchAndSample(
         subURL:    String,
-        sampleN:   Int = 5,
+        testCount: Int = 200,
         timeoutMs: Int = 30_000
     ): List<String> {
-        // Wrap the HTTP call so callers get a clear error instead of a raw
-        // SocketException / UnknownHostException with no URL context
         val body = try {
             httpGet(subURL, timeoutMs)
         } catch (e: Exception) {
@@ -40,16 +52,19 @@ object SubscriptionFetcher {
         }
         if (valid.isEmpty()) return emptyList()
 
-        // sampleN <= 1 means "test everything" — also guards the infinite-loop
-        // that occurred when sampleN = 0 (bucket index never advanced)
-        if (sampleN <= 1) return valid
+        // testCount = 0 means "test everything"
+        if (testCount <= 0 || testCount >= valid.size) return valid
+
+        // Derive sampleN from the desired test count.
+        // Floor division means we might get slightly more than testCount — that's fine.
+        val sampleN = maxOf(valid.size / testCount, 1)
         return uniformSample(valid, sampleN)
     }
 
     // ── HTTP GET ───────────────────────────────────────────────────────────
-    // Uses the base HttpURLConnection (not HttpsURLConnection) so both
-    // http:// and https:// URLs work — the JVM promotes https:// connections
-    // to HttpsURLConnection automatically under the hood.
+    // Uses HttpURLConnection (not HttpsURLConnection) so both http:// and
+    // https:// URLs work. The JVM promotes https:// to HttpsURLConnection
+    // automatically under the hood.
     private fun httpGet(url: String, timeoutMs: Int): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout          = timeoutMs
@@ -74,11 +89,8 @@ object SubscriptionFetcher {
     //   • Plain text, one URI per line
     private fun decode(body: String): List<String> {
         val trimmed = body.trim()
-
-        tryBase64(trimmed, Base64.DEFAULT)?.let { return it }
+        tryBase64(trimmed, Base64.DEFAULT)?.let  { return it }
         tryBase64(trimmed, Base64.NO_PADDING)?.let { return it }
-
-        // Fall back to plain text
         return trimmed.lines().map { it.trim() }.filter { it.isNotEmpty() }
     }
 
@@ -86,7 +98,7 @@ object SubscriptionFetcher {
         return try {
             val decoded = String(Base64.decode(s, flags))
             // Sanity check: decoded text must contain at least one known scheme;
-            // otherwise we likely decoded a non-base64 body and got garbage
+            // if none found we likely decoded a non-base64 body into garbage.
             if (VALID_SCHEMES.none { decoded.contains(it) }) return null
             decoded.lines().map { it.trim() }.filter { it.isNotEmpty() }
         } catch (e: Exception) {
@@ -96,8 +108,8 @@ object SubscriptionFetcher {
 
     // ── UNIFORM SAMPLE ─────────────────────────────────────────────────────
     // Divides the list into fixed-size buckets and picks one random URI per
-    // bucket. This gives even coverage across the whole list, unlike pure
-    // random sampling which tends to cluster around the middle.
+    // bucket. This gives even coverage across the whole subscription list,
+    // unlike pure random sampling which tends to cluster in the middle.
     private fun uniformSample(uris: List<String>, sampleN: Int): List<String> {
         val rng    = java.util.Random(System.currentTimeMillis())
         val result = mutableListOf<String>()

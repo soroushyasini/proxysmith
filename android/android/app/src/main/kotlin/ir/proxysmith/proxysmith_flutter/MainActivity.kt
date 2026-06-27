@@ -14,10 +14,10 @@ class MainActivity : FlutterActivity() {
     }
 
     private var progressSink: EventChannel.EventSink? = null
-    private var pipelineJob: Job? = null
+    private var pipelineJob:  Job? = null
 
-    // FIX: Single lifecycle-aware scope instead of creating new scopes inline.
-    // SupervisorJob means a failed child doesn't cancel the whole scope.
+    // Single lifecycle-aware scope. SupervisorJob means a failed child
+    // coroutine doesn't cancel the whole scope.
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -40,17 +40,30 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
 
                     "startPipeline" -> {
-                        val subUrl    = call.argument<String>("subUrl") ?: ""
-                        val sampleN   = call.argument<Int>("sampleN") ?: 5
+                        val subUrl    = call.argument<String>("subUrl")    ?: ""
                         val maxPingMs = call.argument<Int>("maxPingMs")?.toLong() ?: 8000L
                         val testUrl   = call.argument<String>("testUrl")
                             ?: "https://www.google.com/generate_204"
 
-                        // Cancel any existing pipeline before starting a new one
+                        // TODO (UX pass): Flutter currently sends sampleN (legacy).
+                        // Once the UI is updated to expose testCount, replace this
+                        // mapping with: call.argument<Int>("testCount") ?: 200
+                        //
+                        // For now we accept both params and prefer testCount if present.
+                        val testCount = call.argument<Int>("testCount")
+                            ?: run {
+                                // Legacy sampleN → convert to approximate testCount.
+                                // sampleN=5 on a 8000-URI list ≈ 1600 tests, which
+                                // is too many. Default to 200 when only sampleN given.
+                                val sampleN = call.argument<Int>("sampleN") ?: 5
+                                // A sampleN of 1 means "test all" → pass 0 (test all)
+                                if (sampleN <= 1) 0 else 200
+                            }
+
+                        // Cancel any running pipeline before starting a new one
                         pipelineJob?.cancel()
-                        // FIX: Use the lifecycle-aware scope, not a throwaway one
                         pipelineJob = scope.launch {
-                            runPipeline(subUrl, sampleN, maxPingMs, testUrl, result)
+                            runPipeline(subUrl, testCount, maxPingMs, testUrl, result)
                         }
                     }
 
@@ -64,8 +77,8 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    // FIX: Cancel all coroutines when the Activity is destroyed.
-    // Without this, background work outlives the Activity on real devices.
+    // Cancel all coroutines when the Activity is destroyed to avoid
+    // background work outliving the Activity on real devices.
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
@@ -74,15 +87,15 @@ class MainActivity : FlutterActivity() {
     // ── Pipeline runner ────────────────────────────────────────────────────
     private suspend fun runPipeline(
         subUrl:    String,
-        sampleN:   Int,
+        testCount: Int,
         maxPingMs: Long,
         testUrl:   String,
         result:    MethodChannel.Result
     ) {
         try {
-            // 1. Fetch
+            // 1. Fetch subscription and sample down to testCount URIs
             sendEvent("status", "fetching subscription...")
-            val uris = SubscriptionFetcher.fetchAndSample(subUrl, sampleN)
+            val uris = SubscriptionFetcher.fetchAndSample(subUrl, testCount)
             sendEvent("fetched", uris.size)
 
             if (uris.isEmpty()) {
@@ -92,13 +105,12 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // 2. Pipeline with progress
+            // 2. Run 3-round elimination pipeline with live progress events
             val top10 = Pipeline.run(
-                uris        = uris,
-                concurrency = 20,
-                maxPingMs   = maxPingMs,
-                testUrl     = testUrl,
-                onProgress  = { done, total, round ->
+                uris       = uris,
+                maxPingMs  = maxPingMs,
+                testUrl    = testUrl,
+                onProgress = { done, total, round ->
                     sendEvent("progress", mapOf(
                         "done"  to done,
                         "total" to total,
@@ -111,13 +123,11 @@ class MainActivity : FlutterActivity() {
             val resultList = top10.map { c ->
                 mapOf("uri" to c.uri, "ms" to c.ms)
             }
-            withContext(Dispatchers.Main) {
-                result.success(resultList)
-            }
+            withContext(Dispatchers.Main) { result.success(resultList) }
             sendEvent("status", "done")
 
         } catch (e: CancellationException) {
-            // Don't treat cancellation as an error — it's user-initiated via stopPipeline
+            // User-initiated stop — not an error
             sendEvent("status", "stopped")
             withContext(Dispatchers.Main) { result.success(null) }
         } catch (e: Exception) {
@@ -128,8 +138,9 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // FIX: Use the shared scope instead of spawning a new CoroutineScope each call.
-    // The old code created a new untracked scope on every progress event (potentially hundreds).
+    // Sends a typed event to Flutter via the EventChannel.
+    // Uses the shared scope (not a throwaway one) so these are tracked
+    // and cancelled cleanly on destroy.
     private fun sendEvent(type: String, data: Any?) {
         scope.launch(Dispatchers.Main) {
             progressSink?.success(mapOf("type" to type, "data" to data))

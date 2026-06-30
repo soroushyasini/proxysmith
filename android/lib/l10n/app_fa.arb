@@ -40,6 +40,18 @@
   "menuAbout": "درباره برنامه",
   "menuFeedback": "ارسال بازخورد",
   "menuDonate": "حمایت از پروژه",
+  "menuSources": "مدیریت منابع",
+
+  "sourcesManagerTitle": "منابع سابسکریپشن",
+  "sourcesBuiltInLabel": "پیش‌فرض",
+  "sourcesCustomLabel": "منابع شما",
+  "sourcesEmptyHint": "هنوز منبع سفارشی اضافه نکرده‌اید. برای افزودن، روی + بزنید.",
+  "sourcesAddTitle": "افزودن منبع",
+  "sourcesEditTitle": "ویرایش منبع",
+  "sourcesAliasLabel": "نام",
+  "sourcesUrlLabel": "آدرس سابسکریپشن",
+  "sourcesAddButton": "افزودن",
+  "sourcesSaveButton": "ذخیره",
 
   "aboutTitle": "درباره پراکسی‌اسمیت",
   "aboutVersion": "نسخه {version}",
@@ -54,6 +66,8 @@
   "feedbackTitle": "ارسال بازخورد",
   "feedbackDescription": "باگی پیدا کردید یا پیشنهادی دارید؟ از طریق تلگرام در ارتباط باشید.",
   "feedbackButton": "باز کردن تلگرام",
+
+  "linkLaunchFailed": "باز کردن لینک ممکن نشد. برنامه‌ای برای این کار پیدا نشد.",
 
   "warningPartialResults": "{message}",
 

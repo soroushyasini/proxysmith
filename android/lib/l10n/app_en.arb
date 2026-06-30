@@ -70,6 +70,18 @@
   "menuAbout": "About",
   "menuFeedback": "Send feedback",
   "menuDonate": "Support the project",
+  "menuSources": "Manage sources",
+
+  "sourcesManagerTitle": "Subscription sources",
+  "sourcesBuiltInLabel": "BUILT-IN",
+  "sourcesCustomLabel": "YOUR SOURCES",
+  "sourcesEmptyHint": "No custom sources yet. Tap + to add one.",
+  "sourcesAddTitle": "Add source",
+  "sourcesEditTitle": "Edit source",
+  "sourcesAliasLabel": "Name",
+  "sourcesUrlLabel": "Subscription URL",
+  "sourcesAddButton": "Add",
+  "sourcesSaveButton": "Save",
 
   "aboutTitle": "About ProxySmith",
   "aboutVersion": "Version {version}",
@@ -87,6 +99,8 @@
   "feedbackTitle": "Send feedback",
   "feedbackDescription": "Found a bug or have a suggestion? Reach out on Telegram.",
   "feedbackButton": "Open Telegram",
+
+  "linkLaunchFailed": "Couldn't open the link. No app found to handle it.",
 
   "warningPartialResults": "{message}",
   "@warningPartialResults": {

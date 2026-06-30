@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../l10n/app_localizations.dart';
+import '../screens/sources_manager_screen.dart';
 import '../theme/app_theme.dart';
 import 'legionary_logo.dart';
 
@@ -34,8 +35,12 @@ class OptionsMenuButton extends StatelessWidget {
               context: context,
               builder: (_) => AboutDialogContent(version: currentVersion),
             );
+          case 'sources':
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SourcesManagerScreen()),
+            );
           case 'feedback':
-            _launch(_kTelegramFeedbackUrl);
+            _launch(context, _kTelegramFeedbackUrl);
           case 'donate':
             showModalBottomSheet(
               context: context,
@@ -54,6 +59,14 @@ class OptionsMenuButton extends StatelessWidget {
             const Icon(Icons.info_outline_rounded, size: 18),
             const SizedBox(width: 10),
             Text(l10n.menuAbout),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'sources',
+          child: Row(children: [
+            const Icon(Icons.list_alt_rounded, size: 18),
+            const SizedBox(width: 10),
+            Text(l10n.menuSources),
           ]),
         ),
         PopupMenuItem(
@@ -77,11 +90,32 @@ class OptionsMenuButton extends StatelessWidget {
   }
 }
 
-Future<void> _launch(String url) async {
+/// Attempts to open [url] externally. Returns true on success.
+/// Unlike the previous version, this surfaces failure to the caller instead
+/// of silently doing nothing — canLaunchUrl can under-report on Android
+/// when the <queries> manifest block isn't present (see
+/// android_manifest_snippet/queries_block.xml), so we attempt launchUrl
+/// directly and treat a thrown PlatformException as the real failure signal
+/// rather than trusting canLaunchUrl's pre-check alone.
+Future<bool> _launch(BuildContext context, String url) async {
   final uri = Uri.parse(url);
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  try {
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      _showLaunchFailure(context);
+    }
+    return launched;
+  } catch (_) {
+    if (context.mounted) _showLaunchFailure(context);
+    return false;
   }
+}
+
+void _showLaunchFailure(BuildContext context) {
+  final l10n = AppLocalizations.of(context);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(l10n.linkLaunchFailed)),
+  );
 }
 
 class AboutDialogContent extends StatelessWidget {
@@ -174,7 +208,7 @@ class DonateSheet extends StatelessWidget {
 
           // CoffeeBede banner — clickable, opens the donation page
           InkWell(
-            onTap: () => _launch(_kCoffeeBedeUrl),
+            onTap: () => _launch(context, _kCoffeeBedeUrl),
             borderRadius: BorderRadius.circular(12),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),

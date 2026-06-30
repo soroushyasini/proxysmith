@@ -46,7 +46,7 @@ class AppPalette {
 class AppTheme {
   AppTheme._();
 
-  static ThemeData light() {
+  static ThemeData light({String languageCode = 'en'}) {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppPalette.seedPrimary,
       brightness: Brightness.light,
@@ -55,10 +55,10 @@ class AppTheme {
       secondary: AppPalette.seedSecondary,
       surface: const Color(0xFFF5F0EB),
     );
-    return _buildTheme(scheme, ProxySmithColors.light());
+    return _buildTheme(scheme, ProxySmithColors.light(), languageCode);
   }
 
-  static ThemeData dark() {
+  static ThemeData dark({String languageCode = 'en'}) {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppPalette.seedPrimary,
       brightness: Brightness.dark,
@@ -67,15 +67,28 @@ class AppTheme {
       secondary: AppPalette.seedTertiary,
       surface: const Color(0xFF1A1F2E),
     );
-    return _buildTheme(scheme, ProxySmithColors.dark());
+    return _buildTheme(scheme, ProxySmithColors.dark(), languageCode);
   }
 
-  static ThemeData _buildTheme(ColorScheme scheme, ProxySmithColors ext) {
+  // ── Locale-aware font selection ─────────────────────────────────────
+  // Roboto (Flutter/Android's default) has weak or missing Persian glyph
+  // coverage, which is why Persian text looked bad. Vazirmatn is the
+  // standard open-source font for Persian UI (also covers Latin cleanly),
+  // so we switch the whole app's fontFamily when locale=fa.
+  //
+  // Requires: Vazirmatn font files bundled under assets/fonts/ and
+  // declared in pubspec.yaml (see PUBSPEC_ADDITIONS.yaml).
+  static String _fontForLocale(String languageCode) {
+    return languageCode == 'fa' ? 'Vazirmatn' : 'Roboto';
+  }
+
+  static ThemeData _buildTheme(ColorScheme scheme, ProxySmithColors ext, String languageCode) {
+    final fontFamily = _fontForLocale(languageCode);
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
-      fontFamily: 'Roboto', // normal sans — no monospace for body text
+      fontFamily: fontFamily,
       cardTheme: CardThemeData(
         color: ext.cardBackground,
         elevation: 0,

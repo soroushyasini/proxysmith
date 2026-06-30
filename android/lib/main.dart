@@ -44,8 +44,8 @@ class ProxySmithAppState extends State<ProxySmithApp> {
     return MaterialApp(
       title: 'ProxySmith',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.light(languageCode: _locale.languageCode),
+      darkTheme: AppTheme.dark(languageCode: _locale.languageCode),
       themeMode: _themeMode,
       locale: _locale,
       localizationsDelegates: const [

@@ -5,7 +5,9 @@ import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../models/config_source.dart';
 import '../services/pipeline_bridge.dart';
+import '../services/source_storage.dart';
 import '../theme/app_theme.dart';
+import '../widgets/labeled_switch.dart';
 import '../widgets/legionary_logo.dart';
 import '../widgets/options_menu.dart';
 import '../widgets/proxy_result_card.dart';
@@ -19,7 +21,8 @@ class PipelineScreen extends StatefulWidget {
 }
 
 class _PipelineScreenState extends State<PipelineScreen> {
-  ConfigSource _selectedSource = kConfigSources.first;
+  List<ConfigSource> _allSources = [...kBuiltInSources, kCustomUrlSource];
+  ConfigSource _selectedSource = kBuiltInSources.first;
   final _customUrlCtrl = TextEditingController();
   int _testCount = 200;
 
@@ -30,11 +33,26 @@ class _PipelineScreenState extends State<PipelineScreen> {
   int _round = 0;
   int _done = 0;
   int _total = 0;
+  int _fetchedCount = 0;
   String? _warningMessage;
 
   List<Map<String, dynamic>> _results = [];
 
   StreamSubscription? _eventSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserSources();
+  }
+
+  Future<void> _loadUserSources() async {
+    final userSources = await SourceStorage.loadUserSources();
+    if (!mounted) return;
+    setState(() {
+      _allSources = [...kBuiltInSources, ...userSources, kCustomUrlSource];
+    });
+  }
 
   @override
   void dispose() {
@@ -46,7 +64,7 @@ class _PipelineScreenState extends State<PipelineScreen> {
   String get _effectiveUrl =>
       _selectedSource.isCustom ? _customUrlCtrl.text.trim() : _selectedSource.url!;
 
-  // ── Start ──────────────────────────────────────────────────────────────
+  // -- Start --
   Future<void> _start() async {
     setState(() {
       _running = true;
@@ -57,6 +75,7 @@ class _PipelineScreenState extends State<PipelineScreen> {
       _round = 0;
       _done = 0;
       _total = 0;
+      _fetchedCount = 0;
       _warningMessage = null;
     });
 
@@ -72,20 +91,16 @@ class _PipelineScreenState extends State<PipelineScreen> {
         setState(() {
           switch (type) {
             case 'status':
-              // Backend sends free-text dev-facing status; we map known
-              // ones to localized keys and ignore the rest for display
-              // (they're still useful if the user enables verbose logs).
+              // Backend sends free-text dev-facing status; only used as a
+              // fallback when no richer event (fetched/progress) has fired.
               final s = data as String;
-              if (s.contains('done')) {
-                _statusKey = 'statusDone';
-                _statusArgs = {'count': _results.length};
-              } else if (s == 'stopped') {
+              if (s == 'stopped') {
                 _statusKey = 'statusStopped';
               }
             case 'fetched':
-              _total = data as int;
+              _fetchedCount = data as int;
               _statusKey = 'statusFetched';
-              _statusArgs = {'count': _total};
+              _statusArgs = {'count': _fetchedCount};
             case 'progress':
               final p = Map<String, dynamic>.from(data as Map);
               _round = p['round'] as int;
@@ -97,6 +112,8 @@ class _PipelineScreenState extends State<PipelineScreen> {
                 3 => 'statusRound3',
                 _ => _statusKey,
               };
+              // Real continuous progress across all 3 rounds, weighted by
+              // how much work each round typically represents.
               _progress = switch (_round) {
                 1 => (_done / _total) * 0.7,
                 2 => 0.7 + (_done / _total) * 0.2,
@@ -193,6 +210,8 @@ class _PipelineScreenState extends State<PipelineScreen> {
   }
 
   /// Resolves the current status key + args into localized display text.
+  /// This is the SINGLE source of status text shown to the user — it only
+  /// renders inside the progress card now, not duplicated above it.
   String _statusText(AppLocalizations l10n) {
     final args = _statusArgs;
     switch (_statusKey) {
@@ -201,11 +220,11 @@ class _PipelineScreenState extends State<PipelineScreen> {
       case 'statusFetched':
         return l10n.statusFetched(args?['count'] as int? ?? 0);
       case 'statusRound1':
-        return '${l10n.statusRound1} · ${l10n.statusProgress(_done, _total)}';
+        return '${l10n.statusRound1} (${l10n.statusFetched(_fetchedCount)}) \u00b7 ${l10n.statusProgress(_done, _total)}';
       case 'statusRound2':
-        return '${l10n.statusRound2} · ${l10n.statusProgress(_done, _total)}';
+        return '${l10n.statusRound2} \u00b7 ${l10n.statusProgress(_done, _total)}';
       case 'statusRound3':
-        return '${l10n.statusRound3} · ${l10n.statusProgress(_done, _total)}';
+        return '${l10n.statusRound3} \u00b7 ${l10n.statusProgress(_done, _total)}';
       case 'statusDone':
         return l10n.statusDone(args?['count'] as int? ?? 0);
       case 'statusStopped':
@@ -243,15 +262,24 @@ class _PipelineScreenState extends State<PipelineScreen> {
             children: [
               _topBar(context, l10n, app),
               const SizedBox(height: 16),
-              _statusLine(theme, l10n),
-              const SizedBox(height: 12),
               _inputsCard(l10n, ext),
               const SizedBox(height: 12),
-              if (_running || _total > 0) ...[
+              if (_running || _total > 0 || _fetchedCount > 0) ...[
                 StageProgress(
                   progress: _progress,
                   round: _round,
                   statusText: _statusText(l10n),
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                // Idle state: still show the status line (e.g. "Ready")
+                // exactly once, here, instead of duplicating it above.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    _statusText(l10n),
+                    style: TextStyle(fontSize: 12, color: ext.mutedText),
+                  ),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -271,7 +299,7 @@ class _PipelineScreenState extends State<PipelineScreen> {
     );
   }
 
-  // ── Sections ───────────────────────────────────────────────────────────
+  // -- Sections --
 
   Widget _topBar(BuildContext context, AppLocalizations l10n, ProxySmithAppState app) =>
       Row(
@@ -288,59 +316,68 @@ class _PipelineScreenState extends State<PipelineScreen> {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).extension<ProxySmithColors>()!.mutedText,
                       ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          _languageToggle(app),
-          const SizedBox(width: 6),
-          _themeToggle(app),
-          const SizedBox(width: 6),
           OptionsMenuButton(currentVersion: '2.0.0'),
         ],
       );
 
-  Widget _languageToggle(ProxySmithAppState app) {
-    final isEn = app.locale.languageCode == 'en';
-    return _TogglePill(
-      leftLabel: 'EN',
-      rightLabel: 'فا',
-      isLeftActive: isEn,
-      onTap: () => app.setLocale(Locale(isEn ? 'fa' : 'en')),
-    );
-  }
-
-  Widget _themeToggle(ProxySmithAppState app) {
+  /// Theme + language switches, shown as a compact settings row beneath
+  /// the inputs card rather than crammed into the top bar (where the pill
+  /// toggles previously caused overflow on narrow screens / long app names).
+  Widget _settingsRow(BuildContext context, ProxySmithAppState app, ProxySmithColors ext) {
     final isDark = app.themeMode == ThemeMode.dark;
-    return _TogglePill(
-      leftLabel: '\u2600',
-      rightLabel: '\u263E',
-      isLeftActive: !isDark,
-      onTap: () => app.toggleTheme(!isDark),
+    final isFa = app.locale.languageCode == 'fa';
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        LabeledSwitch(
+          leftLabel: 'EN',
+          rightLabel: 'FA',
+          value: isFa,
+          onChanged: (v) => app.setLocale(Locale(v ? 'fa' : 'en')),
+        ),
+        LabeledSwitch(
+          leftLabel: 'Light',
+          rightLabel: 'Dark',
+          leftIcon: Icons.light_mode_rounded,
+          rightIcon: Icons.dark_mode_rounded,
+          value: isDark,
+          onChanged: (v) => app.toggleTheme(v),
+        ),
+      ],
     );
   }
 
-  Widget _statusLine(ThemeData theme, AppLocalizations l10n) => Text(
-        _statusText(l10n),
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.extension<ProxySmithColors>()!.mutedText,
-        ),
-      );
-
-  Widget _inputsCard(AppLocalizations l10n, ProxySmithColors ext) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.configSourceLabel,
-                style: TextStyle(fontSize: 11, color: ext.mutedText, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<ConfigSource>(
+  Widget _inputsCard(AppLocalizations l10n, ProxySmithColors ext) {
+    final app = ProxySmithApp.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.configSourceLabel,
+              style: TextStyle(fontSize: 11, color: ext.mutedText, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 6),
+            // FIX (overflow bug): DropdownButtonFormField's popup menu
+            // previously matched the *content* width of whichever item
+            // happened to be selected, which let long URLs/labels push it
+            // past the card's bounds. isExpanded + an explicit
+            // SizedBox.expand wrapper forces the popup to match the
+            // field's own width every time, regardless of item content.
+            SizedBox(
+              width: double.infinity,
+              child: DropdownButtonFormField<ConfigSource>(
                 initialValue: _selectedSource,
                 isExpanded: true,
+                menuMaxHeight: 320,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: ext.subtleBackground,
@@ -350,13 +387,14 @@ class _PipelineScreenState extends State<PipelineScreen> {
                     borderSide: BorderSide(color: ext.cardBorder, width: 0.5),
                   ),
                 ),
-                items: kConfigSources
+                items: _allSources
                     .map((s) => DropdownMenuItem(
                           value: s,
                           child: Text(
                             s.isCustom ? l10n.sourceCustomUrl : s.label,
                             style: const TextStyle(fontSize: 13),
                             overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ))
                     .toList(),
@@ -364,44 +402,48 @@ class _PipelineScreenState extends State<PipelineScreen> {
                     ? null
                     : (v) => setState(() => _selectedSource = v!),
               ),
-              if (_selectedSource.isCustom) ...[
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _customUrlCtrl,
-                  enabled: !_running,
-                  keyboardType: TextInputType.url,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: l10n.sourceCustomUrlHint,
-                    filled: true,
-                    fillColor: ext.subtleBackground,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: ext.cardBorder, width: 0.5),
-                    ),
+            ),
+            if (_selectedSource.isCustom) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _customUrlCtrl,
+                enabled: !_running,
+                keyboardType: TextInputType.url,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: l10n.sourceCustomUrlHint,
+                  filled: true,
+                  fillColor: ext.subtleBackground,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: ext.cardBorder, width: 0.5),
                   ),
                 ),
-              ],
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Text(
-                    l10n.testCountLabel,
-                    style: TextStyle(fontSize: 13, color: ext.mutedText),
-                  ),
-                  const Spacer(),
-                  _TestCountStepper(
-                    value: _testCount,
-                    enabled: !_running,
-                    onChanged: (v) => setState(() => _testCount = v),
-                  ),
-                ],
               ),
             ],
-          ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  l10n.testCountLabel,
+                  style: TextStyle(fontSize: 13, color: ext.mutedText),
+                ),
+                const Spacer(),
+                _TestCountStepper(
+                  value: _testCount,
+                  enabled: !_running,
+                  onChanged: (v) => setState(() => _testCount = v),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            _settingsRow(context, app, ext),
+          ],
         ),
-      );
+      ),
+    );
+  }
 
   Widget _runButton(AppLocalizations l10n) => SizedBox(
         height: 50,
@@ -444,29 +486,40 @@ class _PipelineScreenState extends State<PipelineScreen> {
         ),
       );
 
-  Widget _resultsHeader(AppLocalizations l10n) => Row(
-        children: [
-          Expanded(
-            child: Text(
-              l10n.resultsTitle,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.4,
-                color: Theme.of(context).extension<ProxySmithColors>()!.mutedText,
-              ),
+  Widget _resultsHeader(AppLocalizations l10n) {
+    final ext = Theme.of(context).extension<ProxySmithColors>()!;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            l10n.resultsTitle,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.4,
+              color: ext.mutedText,
             ),
           ),
-          if (_results.isNotEmpty)
-            InkWell(
-              onTap: () => _copyAll(l10n),
-              child: Text(
-                l10n.copyAll,
-                style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.primary),
-              ),
+        ),
+        if (_results.isNotEmpty)
+          // FIX: Copy All was a bare clickable Text, easy to miss as
+          // interactive. Now a real small filled button with an icon.
+          TextButton.icon(
+            onPressed: () => _copyAll(l10n),
+            style: TextButton.styleFrom(
+              backgroundColor: ext.subtleBackground,
+              foregroundColor: Theme.of(context).colorScheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-        ],
-      );
+            icon: const Icon(Icons.copy_all_rounded, size: 14),
+            label: Text(l10n.copyAll, style: const TextStyle(fontSize: 11)),
+          ),
+      ],
+    );
+  }
 
   Widget _resultsList(AppLocalizations l10n, ProxySmithColors ext) {
     if (_results.isEmpty) {
@@ -504,62 +557,7 @@ class _PipelineScreenState extends State<PipelineScreen> {
   }
 }
 
-/// Compact two-option pill toggle, used for language and theme switches.
-class _TogglePill extends StatelessWidget {
-  final String leftLabel;
-  final String rightLabel;
-  final bool isLeftActive;
-  final VoidCallback onTap;
-
-  const _TogglePill({
-    required this.leftLabel,
-    required this.rightLabel,
-    required this.isLeftActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ext = Theme.of(context).extension<ProxySmithColors>()!;
-    final activeColor = Theme.of(context).colorScheme.primary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: ext.subtleBackground,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _pillSegment(leftLabel, isLeftActive, activeColor),
-            _pillSegment(rightLabel, !isLeftActive, activeColor),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pillSegment(String label, bool active, Color activeColor) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-            color: active ? activeColor : null,
-          ),
-        ),
-      );
-}
-
-/// Stepper for test count: − [value] + with min/max clamping.
+/// Stepper for test count: minus [value] plus, with min/max clamping.
 class _TestCountStepper extends StatelessWidget {
   final int value;
   final bool enabled;

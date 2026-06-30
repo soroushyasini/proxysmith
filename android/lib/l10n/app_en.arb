@@ -1,0 +1,101 @@
+{
+  "@@locale": "en",
+
+  "appName": "ProxySmith",
+  "appTagline": "Find your fastest proxy",
+
+  "configSourceLabel": "CONFIG SOURCE",
+  "@configSourceLabel": {
+    "description": "Label above the subscription source dropdown"
+  },
+  "sourceCustomUrl": "Custom URL",
+  "sourceCustomUrlHint": "Paste a subscription URL",
+
+  "testCountLabel": "Configs to test",
+
+  "statusReady": "Ready",
+  "statusFetching": "Fetching subscription...",
+  "statusFetched": "Fetched {count} configs",
+  "@statusFetched": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statusRound1": "Testing proxies (round 1 of 3)",
+  "statusRound2": "Refining results (round 2 of 3)",
+  "statusRound3": "Final ranking (round 3 of 3)",
+  "statusProgress": "{done} / {total}",
+  "@statusProgress": {
+    "placeholders": {
+      "done": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "statusDone": "Done — {count} results",
+  "@statusDone": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statusStopped": "Stopped",
+
+  "errorEmptyBody": "The subscription URL returned an empty response. Check the URL is correct and the server is up.",
+  "errorDecodeFailure": "The subscription content could not be decoded. It may be a login page or an unsupported format.",
+  "errorNoValidSchemes": "The subscription has no supported proxy types. Supported: VMess, VLESS, Trojan, Shadowsocks, TUIC, Hysteria2.",
+  "errorNetwork": "Could not reach the subscription server after 3 attempts: {message}",
+  "@errorNetwork": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+  "errorTimeout": "Pipeline exceeded the {minutes}-minute time limit and was stopped.",
+  "@errorTimeout": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "errorGeneric": "Error: {message}",
+  "@errorGeneric": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+
+  "runButton": "Run pipeline",
+  "stopButton": "Stop testing",
+
+  "resultsTitle": "TOP RESULTS",
+  "copyAll": "Copy all",
+  "copiedAll": "Copied {count} URIs",
+  "@copiedAll": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "copiedOne": "Copied #{index}",
+  "@copiedOne": {
+    "placeholders": { "index": { "type": "int" } }
+  },
+  "noResultsYet": "No results yet",
+  "noResultsHint": "Run the pipeline to find working proxies",
+
+  "menuAbout": "About",
+  "menuFeedback": "Send feedback",
+  "menuDonate": "Support the project",
+
+  "aboutTitle": "About ProxySmith",
+  "aboutVersion": "Version {version}",
+  "@aboutVersion": {
+    "placeholders": { "version": { "type": "String" } }
+  },
+  "aboutDescription": "ProxySmith tests proxy subscription lists and ranks them by latency so you can find the fastest working server.",
+
+  "donateTitle": "Support the project",
+  "donateDescription": "If ProxySmith saved you time, consider buying me a coffee or sending a tip.",
+  "donateCoffeeButton": "Buy me a coffee",
+  "donateUsdtLabel": "USDT (ERC20)",
+  "donateAddressCopied": "Address copied",
+
+  "feedbackTitle": "Send feedback",
+  "feedbackDescription": "Found a bug or have a suggestion? Reach out on Telegram.",
+  "feedbackButton": "Open Telegram",
+
+  "warningPartialResults": "{message}",
+  "@warningPartialResults": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+
+  "languageEnglish": "English",
+  "languagePersian": "فارسی",
+
+  "themeLight": "Light",
+  "themeDark": "Dark"
+}

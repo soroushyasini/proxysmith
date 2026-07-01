@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-/// One result row: rank, latency chip, protocol tag, URI, copy button.
+/// One result row: optional selection checkbox, rank, latency chip,
+/// protocol tag, URI, copy button.
+///
+/// Supports two modes:
+///  - Normal: tap copies the URI (existing behavior)
+///  - Selection: a checkbox appears on the left; tap toggles selection
+///    instead of copying (used for the "select configs to export" flow)
 class ProxyResultCard extends StatelessWidget {
   final int rank;
   final int ms;
   final String uri;
   final VoidCallback onTap;
+  final bool selectionMode;
+  final bool selected;
+  final ValueChanged<bool?>? onSelectedChanged;
 
   const ProxyResultCard({
     super.key,
@@ -14,6 +23,9 @@ class ProxyResultCard extends StatelessWidget {
     required this.ms,
     required this.uri,
     required this.onTap,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelectedChanged,
   });
 
   /// Extracts the scheme (vless, trojan, vmess, ...) from the URI for
@@ -28,17 +40,27 @@ class ProxyResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ext = Theme.of(context).extension<ProxySmithColors>()!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
 
     final (chipBg, chipFg) = _latencyColors(isDark);
 
     return InkWell(
-      onTap: onTap,
+      onTap: selectionMode ? () => onSelectedChanged?.call(!selected) : onTap,
       borderRadius: BorderRadius.circular(12),
       child: Card(
+        color: selectionMode && selected ? primary.withValues(alpha: 0.08) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
+              if (selectionMode) ...[
+                Checkbox(
+                  value: selected,
+                  onChanged: onSelectedChanged,
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 2),
+              ],
               _rankBadge(ext),
               const SizedBox(width: 10),
               Expanded(
@@ -67,7 +89,7 @@ class ProxyResultCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.copy_rounded, size: 16, color: ext.mutedText),
+              if (!selectionMode) Icon(Icons.copy_rounded, size: 16, color: ext.mutedText),
             ],
           ),
         ),

@@ -34,14 +34,14 @@ class LabeledSwitch extends StatelessWidget {
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.circular(20),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             _sideLabel(leftLabel, leftIcon, !value, activeColor, ext),
             const SizedBox(width: 4),
             Transform.scale(
-              scale: 0.75,
+              scale: 0.65,
               child: Switch(
                 value: value,
                 onChanged: onChanged,

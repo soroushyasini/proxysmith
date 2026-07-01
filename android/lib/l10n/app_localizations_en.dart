@@ -115,6 +115,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noResultsHint => 'Run the pipeline to find working proxies';
 
   @override
+  String get selectButton => 'Select';
+
+  @override
+  String selectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get copySelected => 'Copy selected';
+
+  @override
+  String get cancelSelection => 'Cancel';
+
+  @override
   String get menuAbout => 'About';
 
   @override

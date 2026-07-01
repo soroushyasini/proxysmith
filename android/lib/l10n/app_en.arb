@@ -67,6 +67,14 @@
   "noResultsYet": "No results yet",
   "noResultsHint": "Run the pipeline to find working proxies",
 
+  "selectButton": "Select",
+  "selectedCount": "{count} selected",
+  "@selectedCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "copySelected": "Copy selected",
+  "cancelSelection": "Cancel",
+
   "menuAbout": "About",
   "menuFeedback": "Send feedback",
   "menuDonate": "Support the project",

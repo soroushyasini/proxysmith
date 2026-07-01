@@ -37,6 +37,11 @@
   "noResultsYet": "هنوز نتیجه‌ای نیست",
   "noResultsHint": "برای یافتن پراکسی‌های فعال، تست را اجرا کنید",
 
+  "selectButton": "انتخاب",
+  "selectedCount": "{count} مورد انتخاب شد",
+  "copySelected": "کپی موارد انتخابی",
+  "cancelSelection": "انصراف",
+
   "menuAbout": "درباره برنامه",
   "menuFeedback": "ارسال بازخورد",
   "menuDonate": "حمایت از پروژه",

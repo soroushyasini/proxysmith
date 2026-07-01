@@ -272,6 +272,30 @@ abstract class AppLocalizations {
   /// **'Run the pipeline to find working proxies'**
   String get noResultsHint;
 
+  /// No description provided for @selectButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get selectButton;
+
+  /// No description provided for @selectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String selectedCount(int count);
+
+  /// No description provided for @copySelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy selected'**
+  String get copySelected;
+
+  /// No description provided for @cancelSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancelSelection;
+
   /// No description provided for @menuAbout.
   ///
   /// In en, this message translates to:

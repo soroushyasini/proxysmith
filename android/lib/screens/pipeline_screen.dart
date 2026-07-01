@@ -37,6 +37,8 @@ class _PipelineScreenState extends State<PipelineScreen> {
   String? _warningMessage;
 
   List<Map<String, dynamic>> _results = [];
+  bool _selectionMode = false;
+  final Set<int> _selectedIndices = {};
 
   StreamSubscription? _eventSub;
 
@@ -77,6 +79,8 @@ class _PipelineScreenState extends State<PipelineScreen> {
       _total = 0;
       _fetchedCount = 0;
       _warningMessage = null;
+      _selectionMode = false;
+      _selectedIndices.clear();
     });
 
     await _eventSub?.cancel();
@@ -361,47 +365,94 @@ class _PipelineScreenState extends State<PipelineScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l10n.configSourceLabel,
-              style: TextStyle(fontSize: 11, color: ext.mutedText, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 6),
-            // FIX (overflow bug): DropdownButtonFormField's popup menu
-            // previously matched the *content* width of whichever item
-            // happened to be selected, which let long URLs/labels push it
-            // past the card's bounds. isExpanded + an explicit
-            // SizedBox.expand wrapper forces the popup to match the
-            // field's own width every time, regardless of item content.
-            SizedBox(
-              width: double.infinity,
-              child: DropdownButtonFormField<ConfigSource>(
-                initialValue: _selectedSource,
-                isExpanded: true,
-                menuMaxHeight: 320,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: ext.subtleBackground,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: ext.cardBorder, width: 0.5),
+            // Settings (language / theme) now lead the card, saving the
+            // vertical space a separate divider+row used to take below.
+            _settingsRow(context, app, ext),
+            const Divider(height: 24),
+
+            // Source picker and test-count stepper share one row instead
+            // of stacking — the dropdown takes the flexible remaining
+            // space, the stepper keeps its compact fixed width.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.configSourceLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: ext.mutedText,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      // FIX (overflow bug): DropdownButtonFormField's popup
+                      // menu previously matched the *content* width of
+                      // whichever item happened to be selected, which let
+                      // long URLs/labels push it past the card's bounds.
+                      // isExpanded forces the popup to match the field's
+                      // own width every time, regardless of item content.
+                      DropdownButtonFormField<ConfigSource>(
+                        initialValue: _selectedSource,
+                        isExpanded: true,
+                        menuMaxHeight: 320,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: ext.subtleBackground,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: ext.cardBorder, width: 0.5),
+                          ),
+                        ),
+                        items: _allSources
+                            .map((s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text(
+                                    s.isCustom ? l10n.sourceCustomUrl : s.label,
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: _running
+                            ? null
+                            : (v) => setState(() => _selectedSource = v!),
+                      ),
+                    ],
                   ),
                 ),
-                items: _allSources
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(
-                            s.isCustom ? l10n.sourceCustomUrl : s.label,
-                            style: const TextStyle(fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ))
-                    .toList(),
-                onChanged: _running
-                    ? null
-                    : (v) => setState(() => _selectedSource = v!),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.testCountLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: ext.mutedText,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      _TestCountStepper(
+                        value: _testCount,
+                        enabled: !_running,
+                        onChanged: (v) => setState(() => _testCount = v),
+                        expand: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             if (_selectedSource.isCustom) ...[
               const SizedBox(height: 8),
@@ -422,23 +473,6 @@ class _PipelineScreenState extends State<PipelineScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  l10n.testCountLabel,
-                  style: TextStyle(fontSize: 13, color: ext.mutedText),
-                ),
-                const Spacer(),
-                _TestCountStepper(
-                  value: _testCount,
-                  enabled: !_running,
-                  onChanged: (v) => setState(() => _testCount = v),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            _settingsRow(context, app, ext),
           ],
         ),
       ),
@@ -488,6 +522,48 @@ class _PipelineScreenState extends State<PipelineScreen> {
 
   Widget _resultsHeader(AppLocalizations l10n) {
     final ext = Theme.of(context).extension<ProxySmithColors>()!;
+    final primary = Theme.of(context).colorScheme.primary;
+
+    if (_selectionMode) {
+      // Selection-mode header: shows count + Copy Selected + Cancel,
+      // replacing the normal title/Copy-All row entirely.
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              l10n.selectedCount(_selectedIndices.length),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: primary),
+            ),
+          ),
+          TextButton(
+            onPressed: _selectedIndices.isEmpty ? null : () => _copySelected(l10n),
+            style: TextButton.styleFrom(
+              backgroundColor: ext.subtleBackground,
+              foregroundColor: primary,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(l10n.copySelected, style: const TextStyle(fontSize: 11)),
+          ),
+          const SizedBox(width: 6),
+          TextButton(
+            onPressed: () => setState(() {
+              _selectionMode = false;
+              _selectedIndices.clear();
+            }),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(l10n.cancelSelection, style: TextStyle(fontSize: 11, color: ext.mutedText)),
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
         Expanded(
@@ -501,14 +577,29 @@ class _PipelineScreenState extends State<PipelineScreen> {
             ),
           ),
         ),
-        if (_results.isNotEmpty)
+        if (_results.isNotEmpty) ...[
+          // "Select" enters selection mode so the user can pick a subset
+          // of configs (e.g. just the top 3) instead of all-or-nothing.
+          TextButton.icon(
+            onPressed: () => setState(() => _selectionMode = true),
+            style: TextButton.styleFrom(
+              foregroundColor: ext.mutedText,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.checklist_rounded, size: 14),
+            label: Text(l10n.selectButton, style: const TextStyle(fontSize: 11)),
+          ),
+          const SizedBox(width: 6),
           // FIX: Copy All was a bare clickable Text, easy to miss as
           // interactive. Now a real small filled button with an icon.
           TextButton.icon(
             onPressed: () => _copyAll(l10n),
             style: TextButton.styleFrom(
               backgroundColor: ext.subtleBackground,
-              foregroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: primary,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               minimumSize: Size.zero,
@@ -517,8 +608,21 @@ class _PipelineScreenState extends State<PipelineScreen> {
             icon: const Icon(Icons.copy_all_rounded, size: 14),
             label: Text(l10n.copyAll, style: const TextStyle(fontSize: 11)),
           ),
+        ],
       ],
     );
+  }
+
+  void _copySelected(AppLocalizations l10n) {
+    final uris = _selectedIndices.map((i) => _results[i]['uri'] as String).join('\n');
+    Clipboard.setData(ClipboardData(text: uris));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.copiedAll(_selectedIndices.length))),
+    );
+    setState(() {
+      _selectionMode = false;
+      _selectedIndices.clear();
+    });
   }
 
   Widget _resultsList(AppLocalizations l10n, ProxySmithColors ext) {
@@ -541,18 +645,37 @@ class _PipelineScreenState extends State<PipelineScreen> {
       );
     }
 
-    return ListView.separated(
-      itemCount: _results.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (ctx, i) {
-        final r = _results[i];
-        return ProxyResultCard(
-          rank: i + 1,
-          ms: r['ms'] as int,
-          uri: r['uri'] as String,
-          onTap: () => _copyOne(r['uri'] as String, i, l10n),
-        );
-      },
+    // FIX (scroll affordance): a thin always-visible Scrollbar makes it
+    // obvious there's more content below the fold — without it, a list
+    // that exactly fills the viewport gives no visual hint that scrolling
+    // would reveal more results.
+    return Scrollbar(
+      thumbVisibility: true,
+      radius: const Radius.circular(8),
+      thickness: 4,
+      child: ListView.separated(
+        padding: const EdgeInsets.only(right: 6), // room for the scrollbar
+        itemCount: _results.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (ctx, i) {
+          final r = _results[i];
+          return ProxyResultCard(
+            rank: i + 1,
+            ms: r['ms'] as int,
+            uri: r['uri'] as String,
+            onTap: () => _copyOne(r['uri'] as String, i, l10n),
+            selectionMode: _selectionMode,
+            selected: _selectedIndices.contains(i),
+            onSelectedChanged: (checked) => setState(() {
+              if (checked == true) {
+                _selectedIndices.add(i);
+              } else {
+                _selectedIndices.remove(i);
+              }
+            }),
+          );
+        },
+      ),
     );
   }
 }
@@ -562,6 +685,7 @@ class _TestCountStepper extends StatelessWidget {
   final int value;
   final bool enabled;
   final ValueChanged<int> onChanged;
+  final bool expand;
 
   static const int min = 50;
   static const int max = 500;
@@ -571,27 +695,31 @@ class _TestCountStepper extends StatelessWidget {
     required this.value,
     required this.enabled,
     required this.onChanged,
+    this.expand = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final ext = Theme.of(context).extension<ProxySmithColors>()!;
-    return Container(
-      decoration: BoxDecoration(
-        color: ext.subtleBackground,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: ext.cardBorder, width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            iconSize: 16,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            onPressed: enabled && value > min ? () => onChanged(value - step) : null,
-            icon: const Icon(Icons.remove),
-          ),
+    final row = Row(
+      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        IconButton(
+          iconSize: 16,
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          onPressed: enabled && value > min ? () => onChanged(value - step) : null,
+          icon: const Icon(Icons.remove),
+        ),
+        if (expand)
+          Expanded(
+            child: Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          )
+        else
           SizedBox(
             width: 40,
             child: Text(
@@ -600,15 +728,23 @@ class _TestCountStepper extends StatelessWidget {
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
-          IconButton(
-            iconSize: 16,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            onPressed: enabled && value < max ? () => onChanged(value + step) : null,
-            icon: const Icon(Icons.add),
-          ),
-        ],
+        IconButton(
+          iconSize: 16,
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          onPressed: enabled && value < max ? () => onChanged(value + step) : null,
+          icon: const Icon(Icons.add),
+        ),
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: ext.subtleBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: ext.cardBorder, width: 0.5),
       ),
+      child: row,
     );
   }
 }

@@ -115,6 +115,20 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noResultsHint => 'برای یافتن پراکسی‌های فعال، تست را اجرا کنید';
 
   @override
+  String get selectButton => 'انتخاب';
+
+  @override
+  String selectedCount(int count) {
+    return '$count مورد انتخاب شد';
+  }
+
+  @override
+  String get copySelected => 'کپی موارد انتخابی';
+
+  @override
+  String get cancelSelection => 'انصراف';
+
+  @override
   String get menuAbout => 'درباره برنامه';
 
   @override

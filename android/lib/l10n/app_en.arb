@@ -2,7 +2,7 @@
   "@@locale": "en",
 
   "appName": "ProxySmith",
-  "appTagline": "Find your fastest proxy",
+  "appTagline": "Find fastest and most stable free servers",
 
   "configSourceLabel": "CONFIG SOURCE",
   "@configSourceLabel": {
@@ -79,6 +79,21 @@
   "menuFeedback": "Send feedback",
   "menuDonate": "Support the project",
   "menuSources": "Manage sources",
+  "menuCheckUpdate": "Check for updates",
+
+  "updateAvailableTitle": "Update available",
+  "updateAvailableBody": "A newer version ({latest}) is available. You have {current}.",
+  "@updateAvailableBody": {
+    "placeholders": {
+      "latest": { "type": "String" },
+      "current": { "type": "String" }
+    }
+  },
+  "updateLaterButton": "Later",
+  "updateOpenGithubButton": "Open GitHub",
+  "updateUpToDate": "You're on the latest version",
+  "updateCheckFailed": "Could not check for updates",
+  "donateSupportButton": "Support on Reymit",
 
   "sourcesManagerTitle": "Subscription sources",
   "sourcesBuiltInLabel": "BUILT-IN",
@@ -99,8 +114,7 @@
   "aboutDescription": "ProxySmith tests proxy subscription lists and ranks them by latency so you can find the fastest working server.",
 
   "donateTitle": "Support the project",
-  "donateDescription": "If ProxySmith saved you time, consider buying me a coffee or sending a tip.",
-  "donateCoffeeButton": "Buy me a coffee",
+  "donateDescription": "If ProxySmith saved you time and helps you to be connceted, you can support the developer.",
   "donateUsdtLabel": "USDT (ERC20)",
   "donateAddressCopied": "Address copied",
 

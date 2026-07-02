@@ -2,7 +2,7 @@
   "@@locale": "fa",
 
   "appName": "پراکسی‌اسمیت",
-  "appTagline": "سریع‌ترین پراکسی خود را پیدا کنید",
+  "appTagline": "پایدارترین و سریع ترین سرورهای رایگان را پیدا کنید",
 
   "configSourceLabel": "منبع کانفیگ",
   "sourceCustomUrl": "آدرس سفارشی",
@@ -10,7 +10,7 @@
 
   "testCountLabel": "تعداد کانفیگ برای تست",
 
-  "statusReady": "آماده",
+  "statusReady": "آماده برای تست",
   "statusFetching": "در حال دریافت سابسکریپشن...",
   "statusFetched": "{count} کانفیگ دریافت شد",
   "statusRound1": "تست پراکسی‌ها (دور ۱ از ۳)",
@@ -20,8 +20,8 @@
   "statusDone": "تمام شد — {count} نتیجه",
   "statusStopped": "متوقف شد",
 
-  "errorEmptyBody": "آدرس سابسکریپشن پاسخ خالی برگرداند. آدرس و سرور را بررسی کنید.",
-  "errorDecodeFailure": "محتوای سابسکریپشن قابل خواندن نبود. ممکن است صفحه ورود یا فرمت پشتیبانی‌نشده باشد.",
+  "errorEmptyBody": "کانفیگی از لینگ سابسکریپشن دریافت نشد. آدرس و سرور را بررسی کنید.",
+  "errorDecodeFailure": "محتوای سابسکریپشن قابل خواندن نبود. ممکن است صفحه ورود یا فرمت، پشتیبانی‌نشده باشد.",
   "errorNoValidSchemes": "سابسکریپشن هیچ نوع پراکسی پشتیبانی‌شده‌ای ندارد. پشتیبانی‌شده‌ها: VMess، VLESS، Trojan، Shadowsocks، TUIC، Hysteria2.",
   "errorNetwork": "اتصال به سرور سابسکریپشن پس از ۳ تلاش برقرار نشد: {message}",
   "errorTimeout": "زمان اجرا از {minutes} دقیقه بیشتر شد و متوقف گردید.",
@@ -34,7 +34,7 @@
   "copyAll": "کپی همه",
   "copiedAll": "{count} آدرس کپی شد",
   "copiedOne": "مورد #{index} کپی شد",
-  "noResultsYet": "هنوز نتیجه‌ای نیست",
+  "noResultsYet": "هنوز نتیجه‌ای یافت نشد",
   "noResultsHint": "برای یافتن پراکسی‌های فعال، تست را اجرا کنید",
 
   "selectButton": "انتخاب",
@@ -47,10 +47,19 @@
   "menuDonate": "حمایت از پروژه",
   "menuSources": "مدیریت منابع",
 
-  "sourcesManagerTitle": "منابع سابسکریپشن",
+  "menuCheckUpdate": "بررسی به‌روزرسانی",
+  "updateAvailableTitle": "به‌روزرسانی موجود است",
+  "updateAvailableBody": "نسخه جدیدتری ({latest}) موجود است. نسخه فعلی شما {current} است.",
+  "updateLaterButton": "بعداً",
+  "updateOpenGithubButton": "باز کردن گیت‌هاب",
+  "updateUpToDate": "شما از آخرین نسخه استفاده می‌کنید",
+  "updateCheckFailed": "بررسی به‌روزرسانی ممکن نشد",
+  "donateSupportButton": "حمایت از طریق ریمیت",
+
+  "sourcesManagerTitle": "مخازن سابسکریپشن",
   "sourcesBuiltInLabel": "پیش‌فرض",
-  "sourcesCustomLabel": "منابع شما",
-  "sourcesEmptyHint": "هنوز منبع سفارشی اضافه نکرده‌اید. برای افزودن، روی + بزنید.",
+  "sourcesCustomLabel": "مخازن شما",
+  "sourcesEmptyHint": "هنوز مخزن سفارشی اضافه نکرده‌اید. برای افزودن، روی + بزنید.",
   "sourcesAddTitle": "افزودن منبع",
   "sourcesEditTitle": "ویرایش منبع",
   "sourcesAliasLabel": "نام",
@@ -60,16 +69,15 @@
 
   "aboutTitle": "درباره پراکسی‌اسمیت",
   "aboutVersion": "نسخه {version}",
-  "aboutDescription": "پراکسی‌اسمیت لیست سابسکریپشن پراکسی شما را تست کرده و بر اساس تأخیر، رتبه‌بندی می‌کند تا سریع‌ترین سرور فعال را پیدا کنید.",
+  "aboutDescription": "پراکسی‌اسمیت، کانفیگ های لینک سابسکریپشن دلخواه شما را طی چند مرحله غربال کرده و بر اساس تأخیر، رتبه‌بندی می‌کند تا سریع‌ترین سرور فعال را پیدا کنید.",
 
   "donateTitle": "حمایت از پروژه",
-  "donateDescription": "اگر پراکسی‌اسمیت در وقت شما صرفه‌جویی کرد، می‌توانید با یک قهوه یا مبلغی حمایت کنید.",
-  "donateCoffeeButton": "خرید قهوه برای من",
+  "donateDescription": "اگر پراکسی‌اسمیت در زمان شما صرفه‌جویی کرد و در اتصال پایدار شما به دنیا کمک کرد، می‌توانید از توسعه دهنده این اپ حمایت کنید.",
   "donateUsdtLabel": "تتر (شبکه ERC20)",
   "donateAddressCopied": "آدرس کپی شد",
 
   "feedbackTitle": "ارسال بازخورد",
-  "feedbackDescription": "باگی پیدا کردید یا پیشنهادی دارید؟ از طریق تلگرام در ارتباط باشید.",
+  "feedbackDescription": "باگی پیدا کردید یا پیشنهادی دارید؟ از طریق تلگرام با توسعه دهنده در ارتباط باشید.",
   "feedbackButton": "باز کردن تلگرام",
 
   "linkLaunchFailed": "باز کردن لینک ممکن نشد. برنامه‌ای برای این کار پیدا نشد.",

@@ -12,7 +12,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get appName => 'پراکسی‌اسمیت';
 
   @override
-  String get appTagline => 'سریع‌ترین پراکسی خود را پیدا کنید';
+  String get appTagline => 'پایدارترین و سریع ترین سرورهای رایگان را پیدا کنید';
 
   @override
   String get configSourceLabel => 'منبع کانفیگ';
@@ -27,7 +27,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get testCountLabel => 'تعداد کانفیگ برای تست';
 
   @override
-  String get statusReady => 'آماده';
+  String get statusReady => 'آماده برای تست';
 
   @override
   String get statusFetching => 'در حال دریافت سابسکریپشن...';
@@ -61,11 +61,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get errorEmptyBody =>
-      'آدرس سابسکریپشن پاسخ خالی برگرداند. آدرس و سرور را بررسی کنید.';
+      'کانفیگی از لینگ سابسکریپشن دریافت نشد. آدرس و سرور را بررسی کنید.';
 
   @override
   String get errorDecodeFailure =>
-      'محتوای سابسکریپشن قابل خواندن نبود. ممکن است صفحه ورود یا فرمت پشتیبانی‌نشده باشد.';
+      'محتوای سابسکریپشن قابل خواندن نبود. ممکن است صفحه ورود یا فرمت، پشتیبانی‌نشده باشد.';
 
   @override
   String get errorNoValidSchemes =>
@@ -109,7 +109,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get noResultsYet => 'هنوز نتیجه‌ای نیست';
+  String get noResultsYet => 'هنوز نتیجه‌ای یافت نشد';
 
   @override
   String get noResultsHint => 'برای یافتن پراکسی‌های فعال، تست را اجرا کنید';
@@ -141,17 +141,43 @@ class AppLocalizationsFa extends AppLocalizations {
   String get menuSources => 'مدیریت منابع';
 
   @override
-  String get sourcesManagerTitle => 'منابع سابسکریپشن';
+  String get menuCheckUpdate => 'بررسی به‌روزرسانی';
+
+  @override
+  String get updateAvailableTitle => 'به‌روزرسانی موجود است';
+
+  @override
+  String updateAvailableBody(String latest, String current) {
+    return 'نسخه جدیدتری ($latest) موجود است. نسخه فعلی شما $current است.';
+  }
+
+  @override
+  String get updateLaterButton => 'بعداً';
+
+  @override
+  String get updateOpenGithubButton => 'باز کردن گیت‌هاب';
+
+  @override
+  String get updateUpToDate => 'شما از آخرین نسخه استفاده می‌کنید';
+
+  @override
+  String get updateCheckFailed => 'بررسی به‌روزرسانی ممکن نشد';
+
+  @override
+  String get donateSupportButton => 'حمایت از طریق ریمیت';
+
+  @override
+  String get sourcesManagerTitle => 'مخازن سابسکریپشن';
 
   @override
   String get sourcesBuiltInLabel => 'پیش‌فرض';
 
   @override
-  String get sourcesCustomLabel => 'منابع شما';
+  String get sourcesCustomLabel => 'مخازن شما';
 
   @override
   String get sourcesEmptyHint =>
-      'هنوز منبع سفارشی اضافه نکرده‌اید. برای افزودن، روی + بزنید.';
+      'هنوز مخزن سفارشی اضافه نکرده‌اید. برای افزودن، روی + بزنید.';
 
   @override
   String get sourcesAddTitle => 'افزودن منبع';
@@ -181,17 +207,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get aboutDescription =>
-      'پراکسی‌اسمیت لیست سابسکریپشن پراکسی شما را تست کرده و بر اساس تأخیر، رتبه‌بندی می‌کند تا سریع‌ترین سرور فعال را پیدا کنید.';
+      'پراکسی‌اسمیت، کانفیگ های لینک سابسکریپشن دلخواه شما را طی چند مرحله غربال کرده و بر اساس تأخیر، رتبه‌بندی می‌کند تا سریع‌ترین سرور فعال را پیدا کنید.';
 
   @override
   String get donateTitle => 'حمایت از پروژه';
 
   @override
   String get donateDescription =>
-      'اگر پراکسی‌اسمیت در وقت شما صرفه‌جویی کرد، می‌توانید با یک قهوه یا مبلغی حمایت کنید.';
-
-  @override
-  String get donateCoffeeButton => 'خرید قهوه برای من';
+      'اگر پراکسی‌اسمیت در زمان شما صرفه‌جویی کرد و در اتصال پایدار شما به دنیا کمک کرد، می‌توانید از توسعه دهنده این اپ حمایت کنید.';
 
   @override
   String get donateUsdtLabel => 'تتر (شبکه ERC20)';
@@ -204,7 +227,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get feedbackDescription =>
-      'باگی پیدا کردید یا پیشنهادی دارید؟ از طریق تلگرام در ارتباط باشید.';
+      'باگی پیدا کردید یا پیشنهادی دارید؟ از طریق تلگرام با توسعه دهنده در ارتباط باشید.';
 
   @override
   String get feedbackButton => 'باز کردن تلگرام';

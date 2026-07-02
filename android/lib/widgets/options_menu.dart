@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:convert';
 import '../l10n/app_localizations.dart';
 import '../screens/sources_manager_screen.dart';
 import '../theme/app_theme.dart';
@@ -9,12 +11,15 @@ import 'legionary_logo.dart';
 
 // External links — change here if they ever move.
 const String _kTelegramFeedbackUrl = 'https://t.me/romanlegioner';
-const String _kCoffeeBedeUrl = 'https://www.coffeebede.com/romanlegioner';
-const String _kCoffeeBedeBannerUrl =
-    'https://coffeebede.ir/DashboardTemplateV2/app-assets/images/banner/default-yellow.svg';
+const String _kReymitUrl = 'https://reymit.ir/romanlegioner';
 const String _kUsdtErc20Address = '0x189E983fd42AA7d2c79e23351dD2bDD83E1fA20B';
+const String _kReleasesApiUrl =
+    'https://api.github.com/repos/soroushyasini/proxysmith/releases/latest';
+const String _kReleasesPageUrl =
+    'https://github.com/soroushyasini/proxysmith/releases/latest';
 
-/// Top-bar "..." menu button. Opens a popup with About / Feedback / Donate.
+/// Top-bar "..." menu button. Opens a popup with About / Sources / Feedback
+/// / Donate / Check for updates.
 class OptionsMenuButton extends StatelessWidget {
   final String currentVersion;
 
@@ -50,6 +55,8 @@ class OptionsMenuButton extends StatelessWidget {
               ),
               builder: (_) => const DonateSheet(),
             );
+          case 'update':
+            _checkForUpdate(context, currentVersion);
         }
       },
       itemBuilder: (context) => [
@@ -67,6 +74,14 @@ class OptionsMenuButton extends StatelessWidget {
             const Icon(Icons.list_alt_rounded, size: 18),
             const SizedBox(width: 10),
             Text(l10n.menuSources),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'update',
+          child: Row(children: [
+            const Icon(Icons.system_update_alt_rounded, size: 18),
+            const SizedBox(width: 10),
+            Text(l10n.menuCheckUpdate),
           ]),
         ),
         PopupMenuItem(
@@ -91,12 +106,10 @@ class OptionsMenuButton extends StatelessWidget {
 }
 
 /// Attempts to open [url] externally. Returns true on success.
-/// Unlike the previous version, this surfaces failure to the caller instead
-/// of silently doing nothing — canLaunchUrl can under-report on Android
-/// when the <queries> manifest block isn't present (see
-/// android_manifest_snippet/queries_block.xml), so we attempt launchUrl
-/// directly and treat a thrown PlatformException as the real failure signal
-/// rather than trusting canLaunchUrl's pre-check alone.
+/// Surfaces failure to the caller instead of silently doing nothing —
+/// canLaunchUrl can under-report on Android when the <queries> manifest
+/// block isn't present, so we attempt launchUrl directly and treat a
+/// thrown PlatformException as the real failure signal.
 Future<bool> _launch(BuildContext context, String url) async {
   final uri = Uri.parse(url);
   try {
@@ -116,6 +129,53 @@ void _showLaunchFailure(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(l10n.linkLaunchFailed)),
   );
+}
+
+/// Checks GitHub's "latest release" API and compares the tag against the
+/// running app version. Shows a dialog if a newer version exists, or a
+/// snackbar for "up to date" / "check failed".
+Future<void> _checkForUpdate(BuildContext context, String currentVersion) async {
+  final l10n = AppLocalizations.of(context);
+  try {
+    final res = await http.get(Uri.parse(_kReleasesApiUrl));
+    if (res.statusCode != 200) throw Exception('status ${res.statusCode}');
+    final tag = (jsonDecode(res.body)['tag_name'] as String).replaceFirst('v', '');
+    if (!context.mounted) return;
+
+    if (tag != currentVersion) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(l10n.updateAvailableTitle),
+          content: Text(l10n.updateAvailableBody(tag, currentVersion)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.updateLaterButton),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _launch(context, _kReleasesPageUrl);
+              },
+              child: Text(l10n.updateOpenGithubButton),
+            ),
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.updateUpToDate)),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.updateCheckFailed)),
+      );
+    }
+  }
 }
 
 class AboutDialogContent extends StatelessWidget {
@@ -156,13 +216,8 @@ class AboutDialogContent extends StatelessWidget {
   }
 }
 
-/// Donate bottom sheet — CoffeeBede link/banner plus the USDT (ERC20)
-/// address with a tap-to-copy QR code.
-///
-/// Note: renders the QR live via QrImageView (package: qr_flutter) rather
-/// than bundling a static QR image asset — keeps the address change a
-/// one-line edit (_kUsdtErc20Address above) instead of a regenerate-and-
-/// re-bundle step.
+/// Donate bottom sheet — Reymit link plus the USDT (ERC20) address with a
+/// tap-to-copy QR code.
 class DonateSheet extends StatelessWidget {
   const DonateSheet({super.key});
 
@@ -206,27 +261,11 @@ class DonateSheet extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // CoffeeBede banner — clickable, opens the donation page
-          InkWell(
-            onTap: () => _launch(context, _kCoffeeBedeUrl),
-            borderRadius: BorderRadius.circular(12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                _kCoffeeBedeBannerUrl,
-                height: 60,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  height: 60,
-                  color: const Color(0xFFFFC107),
-                  alignment: Alignment.center,
-                  child: Text(
-                    l10n.donateCoffeeButton,
-                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
-                  ),
-                ),
-              ),
-            ),
+          // Reymit support button
+          ElevatedButton.icon(
+            onPressed: () => _launch(context, _kReymitUrl),
+            icon: const Icon(Icons.favorite_rounded),
+            label: Text(l10n.donateSupportButton),
           ),
           const SizedBox(height: 20),
 
@@ -236,8 +275,6 @@ class DonateSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
-          // QR code — generated live from the address constant above.
-          // Requires the qr_flutter package in pubspec.yaml.
           Center(
             child: Container(
               padding: const EdgeInsets.all(12),

@@ -33,7 +33,7 @@ class ConfigSource {
 /// To add or change built-in sources later, edit only this list.
 const List<ConfigSource> kBuiltInSources = [
   ConfigSource(
-    label: 'Epodonios (recommended)',
+    label: 'Epodonios (default)',
     url: 'https://raw.githubusercontent.com/Epodonios/v2ray-configs/refs/heads/main/All_Configs_Sub.txt',
   ),
   ConfigSource(

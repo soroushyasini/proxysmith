@@ -107,7 +107,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTagline.
   ///
   /// In en, this message translates to:
-  /// **'Find your fastest proxy'**
+  /// **'Find fastest and most stable free servers'**
   String get appTagline;
 
   /// Label above the subscription source dropdown
@@ -320,6 +320,54 @@ abstract class AppLocalizations {
   /// **'Manage sources'**
   String get menuSources;
 
+  /// No description provided for @menuCheckUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get menuCheckUpdate;
+
+  /// No description provided for @updateAvailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get updateAvailableTitle;
+
+  /// No description provided for @updateAvailableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer version ({latest}) is available. You have {current}.'**
+  String updateAvailableBody(String latest, String current);
+
+  /// No description provided for @updateLaterButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updateLaterButton;
+
+  /// No description provided for @updateOpenGithubButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Open GitHub'**
+  String get updateOpenGithubButton;
+
+  /// No description provided for @updateUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the latest version'**
+  String get updateUpToDate;
+
+  /// No description provided for @updateCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check for updates'**
+  String get updateCheckFailed;
+
+  /// No description provided for @donateSupportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Support on Reymit'**
+  String get donateSupportButton;
+
   /// No description provided for @sourcesManagerTitle.
   ///
   /// In en, this message translates to:
@@ -407,14 +455,8 @@ abstract class AppLocalizations {
   /// No description provided for @donateDescription.
   ///
   /// In en, this message translates to:
-  /// **'If ProxySmith saved you time, consider buying me a coffee or sending a tip.'**
+  /// **'If ProxySmith saved you time and helps you to be connceted, you can support the developer.'**
   String get donateDescription;
-
-  /// No description provided for @donateCoffeeButton.
-  ///
-  /// In en, this message translates to:
-  /// **'Buy me a coffee'**
-  String get donateCoffeeButton;
 
   /// No description provided for @donateUsdtLabel.
   ///

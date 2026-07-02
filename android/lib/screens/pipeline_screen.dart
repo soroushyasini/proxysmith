@@ -12,6 +12,7 @@ import '../widgets/legionary_logo.dart';
 import '../widgets/options_menu.dart';
 import '../widgets/proxy_result_card.dart';
 import '../widgets/stage_progress.dart';
+import '../app_version.dart';
 
 class PipelineScreen extends StatefulWidget {
   const PipelineScreen({super.key});
@@ -24,7 +25,7 @@ class _PipelineScreenState extends State<PipelineScreen> {
   List<ConfigSource> _allSources = [...kBuiltInSources, kCustomUrlSource];
   ConfigSource _selectedSource = kBuiltInSources.first;
   final _customUrlCtrl = TextEditingController();
-  int _testCount = 200;
+  int _testCount = 350;
 
   bool _running = false;
   String _statusKey = 'ready'; // semantic key, resolved to text at build time
@@ -326,7 +327,7 @@ class _PipelineScreenState extends State<PipelineScreen> {
               ],
             ),
           ),
-          OptionsMenuButton(currentVersion: '2.0.0'),
+          OptionsMenuButton(currentVersion: kAppVersion),
         ],
       );
 
@@ -688,7 +689,7 @@ class _TestCountStepper extends StatelessWidget {
   final bool expand;
 
   static const int min = 50;
-  static const int max = 500;
+  static const int max = 1000;
   static const int step = 50;
 
   const _TestCountStepper({

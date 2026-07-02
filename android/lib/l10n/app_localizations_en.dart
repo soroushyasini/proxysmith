@@ -12,7 +12,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appName => 'ProxySmith';
 
   @override
-  String get appTagline => 'Find your fastest proxy';
+  String get appTagline => 'Find fastest and most stable free servers';
 
   @override
   String get configSourceLabel => 'CONFIG SOURCE';
@@ -141,6 +141,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuSources => 'Manage sources';
 
   @override
+  String get menuCheckUpdate => 'Check for updates';
+
+  @override
+  String get updateAvailableTitle => 'Update available';
+
+  @override
+  String updateAvailableBody(String latest, String current) {
+    return 'A newer version ($latest) is available. You have $current.';
+  }
+
+  @override
+  String get updateLaterButton => 'Later';
+
+  @override
+  String get updateOpenGithubButton => 'Open GitHub';
+
+  @override
+  String get updateUpToDate => 'You\'re on the latest version';
+
+  @override
+  String get updateCheckFailed => 'Could not check for updates';
+
+  @override
+  String get donateSupportButton => 'Support on Reymit';
+
+  @override
   String get sourcesManagerTitle => 'Subscription sources';
 
   @override
@@ -187,10 +213,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get donateDescription =>
-      'If ProxySmith saved you time, consider buying me a coffee or sending a tip.';
-
-  @override
-  String get donateCoffeeButton => 'Buy me a coffee';
+      'If ProxySmith saved you time and helps you to be connceted, you can support the developer.';
 
   @override
   String get donateUsdtLabel => 'USDT (ERC20)';

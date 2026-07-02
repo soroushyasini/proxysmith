@@ -61,7 +61,7 @@ func emit(event map[string]interface{}) {
 	if err != nil {
 		return
 	}
-	fmt.Fprintln(realStdout, string(b))
+	fmt.Fprintln(realStdout, "PSJSON:"+string(b))
 }
 
 func emitStatus(message string) {

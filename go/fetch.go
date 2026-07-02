@@ -14,7 +14,9 @@ import (
 const DefaultSubURL = "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt"
 
 func fetchAndSample(subURL string, sampleN int) ([]string, error) {
-	fmt.Printf("  fetching subscription from %s\n", subURL)
+	if !jsonMode {
+		fmt.Printf("  fetching subscription from %s\n", subURL)
+	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(subURL)
@@ -28,14 +30,12 @@ func fetchAndSample(subURL string, sampleN int) ([]string, error) {
 		return nil, fmt.Errorf("read: %w", err)
 	}
 
-	// try base64 decode; if it fails treat as plain text
 	var lines []string
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(body)))
 	if err != nil {
 		decoded, err = base64.RawStdEncoding.DecodeString(strings.TrimSpace(string(body)))
 	}
 	if err == nil {
-		// decoded successfully
 		scanner := bufio.NewScanner(strings.NewReader(string(decoded)))
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
@@ -44,7 +44,6 @@ func fetchAndSample(subURL string, sampleN int) ([]string, error) {
 			}
 		}
 	} else {
-		// plain text subscription
 		scanner := bufio.NewScanner(strings.NewReader(string(body)))
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
@@ -54,13 +53,18 @@ func fetchAndSample(subURL string, sampleN int) ([]string, error) {
 		}
 	}
 
-	fmt.Printf("  fetched %d valid URIs\n", len(lines))
+	if !jsonMode {
+		fmt.Printf("  fetched %d valid URIs\n", len(lines))
+	}
+
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("subscription returned no valid proxy URIs")
+	}
 
 	if sampleN <= 1 {
 		return lines, nil
 	}
 
-	// sample 1-in-N: pick indices 0, N, 2N, ... then shuffle within each bucket
 	var sampled []string
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < len(lines); i += sampleN {
@@ -73,7 +77,9 @@ func fetchAndSample(subURL string, sampleN int) ([]string, error) {
 		sampled = append(sampled, pick)
 	}
 
-	fmt.Printf("  after sampling (1-in-%d): %d URIs\n", sampleN, len(sampled))
+	if !jsonMode {
+		fmt.Printf("  after sampling (1-in-%d): %d URIs\n", sampleN, len(sampled))
+	}
 	return sampled, nil
 }
 

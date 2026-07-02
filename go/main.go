@@ -1,127 +1,186 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 )
 
 type Config struct {
-	SubURL      string
-	SampleN     int
-	Concurrency int
-	MaxPingMs   int64
+	SubURL       string
+	SampleN      int
+	Concurrency  int
+	MaxPingMs    int64
+	TestCount    int
+	OutputFormat string
 }
 
-func promptConfig() Config {
-	r := bufio.NewReader(os.Stdin)
+func parseFlags() Config {
+	subURL := flag.String("sub-url", DefaultSubURL, "Subscription URL")
+	sampleN := flag.Int("sample-n", 5, "Sample rate (1-in-N, 1=no sampling)")
+	concurrency := flag.Int("concurrency", 20, "Round 1 concurrency (1-60)")
+	maxPingMs := flag.Int64("max-ping-ms", 8000, "Max ping ms (0=no limit)")
+	testCount := flag.Int("test-count", 350, "Target number of configs to test")
+	outputFormat := flag.String("output-format", "human", "Output format: human | jsonl")
+	flag.Parse()
 
-	ask := func(prompt, def string) string {
-		fmt.Printf("  %s [default: %s]: ", prompt, def)
-		line, _ := r.ReadString('\n')
-		line = strings.TrimSpace(line)
-		if line == "" {
-			return def
-		}
-		return line
+	c := Config{
+		SubURL:       *subURL,
+		SampleN:      *sampleN,
+		Concurrency:  *concurrency,
+		MaxPingMs:    *maxPingMs,
+		TestCount:    *testCount,
+		OutputFormat: *outputFormat,
 	}
-
-	fmt.Println()
-	fmt.Println("── ProxySmith Pipeline Config ──")
-	fmt.Println()
-
-	subURL   := ask("Subscription URL", DefaultSubURL)
-	sampleS  := ask("Sample rate (1-in-N, 1=no sampling, 5=pick 1 of every 5)", "5")
-	concurrS := ask("Round 1 concurrency (20-60)", "20")
-	pingS    := ask("Max ping ms (0=no limit)", "8000")
-
-	sampleN, _  := strconv.Atoi(sampleS)
-	concurr, _  := strconv.Atoi(concurrS)
-	pingMs, _   := strconv.ParseInt(pingS, 10, 64)
-
-	if sampleN < 1  { sampleN = 1 }
-	if concurr < 1  { concurr = 20 }
-	if concurr > 60 { concurr = 60 }
-
-	return Config{
-		SubURL:      subURL,
-		SampleN:     sampleN,
-		Concurrency: concurr,
-		MaxPingMs:   pingMs,
+	if c.SampleN < 1 {
+		c.SampleN = 1
 	}
+	if c.Concurrency < 1 {
+		c.Concurrency = 1
+	}
+	if c.Concurrency > 60 {
+		c.Concurrency = 60
+	}
+	return c
+}
+
+var jsonMode bool
+
+// realStdout holds the original stdout handle, captured before os.Stdout
+// gets redirected to null. All our own JSON output goes through this,
+// never through the (possibly redirected) os.Stdout variable.
+var realStdout *os.File = os.Stdout
+
+func emit(event map[string]interface{}) {
+	if !jsonMode {
+		return
+	}
+	b, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	fmt.Fprintln(realStdout, string(b))
+}
+
+func emitStatus(message string) {
+	emit(map[string]interface{}{"type": "status", "message": message})
+}
+
+func emitError(message string) {
+	emit(map[string]interface{}{"type": "error", "message": message})
+}
+
+// silenceStdout redirects the package-level os.Stdout to the null device.
+// Any library that prints via fmt.Println/fmt.Fprintln(os.Stdout, ...) —
+// including xray-core's deprecation warnings, which ignore the configured
+// log level — gets swallowed. Our own output uses realStdout instead, so
+// it's unaffected. Must be called before pipeline execution starts, after
+// realStdout has already captured the original handle above.
+func silenceStdout() {
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		return // if this fails, worst case is noisier jsonl output, not a crash
+	}
+	os.Stdout = devNull
 }
 
 func main() {
-	cfg := promptConfig()
+	cfg := parseFlags()
+	jsonMode = cfg.OutputFormat == "jsonl"
 
-	fmt.Println()
-	fmt.Println("── Step 1: Fetch & Sample ──")
+	if jsonMode {
+		silenceStdout()
+	} else {
+		fmt.Println()
+		fmt.Println("── ProxySmith Pipeline ──")
+		fmt.Println()
+	}
+
+	emitStatus("fetching subscription")
 	uris, err := fetchAndSample(cfg.SubURL, cfg.SampleN)
 	if err != nil {
-		fmt.Printf("FAILED: %v\n", err)
+		if jsonMode {
+			emitError(fmt.Sprintf("fetch failed: %v", err))
+		} else {
+			fmt.Printf("FAILED: %v\n", err)
+		}
 		os.Exit(1)
 	}
+
+	if cfg.TestCount > 0 && len(uris) > cfg.TestCount {
+		uris = uris[:cfg.TestCount]
+	}
+	emit(map[string]interface{}{"type": "fetched", "count": len(uris)})
 
 	start := time.Now()
 
-	// Round 1: full concurrency, keep top 60
-	r1 := runRound("Round 1", uris, cfg.Concurrency, 60, cfg.MaxPingMs)
+	r1 := runRound(1, "Round 1", uris, cfg.Concurrency, 60, cfg.MaxPingMs)
 	if len(r1) == 0 {
-		fmt.Println("No configs passed Round 1. Try increasing max ping or lowering sample rate.")
-		os.Exit(1)
+		failNoPassing(1)
 	}
 
-	// Round 2: concurrency 5, keep top 30
 	r1uris := extractURIs(r1)
-	r2 := runRound("Round 2", r1uris, 5, 30, 0)
+	r2 := runRound(2, "Round 2", r1uris, 5, 30, 0)
 	if len(r2) == 0 {
-		fmt.Println("No configs passed Round 2.")
-		os.Exit(1)
+		failNoPassing(2)
 	}
 
-	// Round 3: single-threaded, keep top 10
 	r2uris := extractURIs(r2)
-	r3 := runRound("Round 3", r2uris, 1, 10, 0)
+	r3 := runRound(3, "Round 3", r2uris, 1, 10, 0)
 	if len(r3) == 0 {
-		fmt.Println("No configs passed Round 3.")
-		os.Exit(1)
+		failNoPassing(3)
 	}
 
 	elapsed := time.Since(start)
 
-	// ── Final output ──────────────────────────────────────────────────────────
-	fmt.Printf("\n════════════════════════════════════════\n")
-	fmt.Printf("  FINAL RESULTS  (%s total)\n", elapsed.Round(time.Second))
-	fmt.Printf("════════════════════════════════════════\n\n")
-
-	for i, c := range r3 {
-		fmt.Printf("  #%02d  %5dms  %s\n", i+1, c.Ms, shortURI(c.URI, 70))
-	}
-
-	// save plain URI list
-	outFile := "results.txt"
-	f, err := os.Create(outFile)
-	if err == nil {
-		for _, c := range r3 {
-			fmt.Fprintf(f, "%s\n", c.URI)
+	if jsonMode {
+		for i, c := range r3 {
+			emit(map[string]interface{}{
+				"type": "result",
+				"rank": i + 1,
+				"ms":   c.Ms,
+				"uri":  c.URI,
+			})
 		}
-		f.Close()
-		fmt.Printf("\n  URIs saved to %s\n", outFile)
-	}
-
-	// save with latencies
-	outFile2 := "results_with_ping.txt"
-	f2, err := os.Create(outFile2)
-	if err == nil {
-		for _, c := range r3 {
-			fmt.Fprintf(f2, "%dms\t%s\n", c.Ms, c.URI)
+		emit(map[string]interface{}{"type": "done", "count": len(r3)})
+	} else {
+		fmt.Printf("\n════════════════════════════════════════\n")
+		fmt.Printf("  FINAL RESULTS  (%s total)\n", elapsed.Round(time.Second))
+		fmt.Printf("════════════════════════════════════════\n\n")
+		for i, c := range r3 {
+			fmt.Printf("  #%02d  %5dms  %s\n", i+1, c.Ms, shortURI(c.URI, 70))
 		}
-		f2.Close()
-		fmt.Printf("  URIs+ping saved to %s\n\n", outFile2)
+
+		outFile := "results.txt"
+		if f, err := os.Create(outFile); err == nil {
+			for _, c := range r3 {
+				fmt.Fprintf(f, "%s\n", c.URI)
+			}
+			f.Close()
+			fmt.Printf("\n  URIs saved to %s\n", outFile)
+		}
+
+		outFile2 := "results_with_ping.txt"
+		if f2, err := os.Create(outFile2); err == nil {
+			for _, c := range r3 {
+				fmt.Fprintf(f2, "%dms\t%s\n", c.Ms, c.URI)
+			}
+			f2.Close()
+			fmt.Printf("  URIs+ping saved to %s\n\n", outFile2)
+		}
 	}
+}
+
+func failNoPassing(round int) {
+	msg := fmt.Sprintf("no configs passed round %d", round)
+	if jsonMode {
+		emitError(msg)
+	} else {
+		fmt.Println(msg + ". Try increasing max ping or lowering sample rate.")
+	}
+	os.Exit(1)
 }
 
 func extractURIs(cs []Candidate) []string {

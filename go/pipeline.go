@@ -14,19 +14,23 @@ type Candidate struct {
 }
 
 func runRound(
-	label       string,
-	uris        []string,
+	roundNum int,
+	label string,
+	uris []string,
 	concurrency int,
-	keepTop     int,
-	maxPingMs   int64,
+	keepTop int,
+	maxPingMs int64,
 ) []Candidate {
-	fmt.Printf("\n── %s: testing %d configs (concurrency=%d) ──\n", label, len(uris), concurrency)
+	if !jsonMode {
+		fmt.Printf("\n── %s: testing %d configs (concurrency=%d) ──\n", label, len(uris), concurrency)
+	}
 
 	results := make([]Candidate, len(uris))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	done := 0
+	total := len(uris)
 
 	for i, uri := range uris {
 		wg.Add(1)
@@ -38,10 +42,7 @@ func runRound(
 			outbound, err := parseURIToOutbound(u)
 			if err != nil {
 				results[idx] = Candidate{URI: u, Ms: -1, Err: fmt.Sprintf("parse: %v", err)}
-				mu.Lock()
-				done++
-				fmt.Printf("  [%d/%d] SKIP (parse error)\n", done, len(uris))
-				mu.Unlock()
+				reportDone(&mu, &done, total, roundNum, results[idx], u)
 				return
 			}
 
@@ -57,19 +58,11 @@ func runRound(
 				results[idx] = Candidate{URI: u, Ms: ms}
 			}
 
-			mu.Lock()
-			done++
-			if results[idx].Ms >= 0 {
-				fmt.Printf("  [%d/%d] %5dms  %s\n", done, len(uris), results[idx].Ms, shortURI(u, 55))
-			} else {
-				fmt.Printf("  [%d/%d] FAIL    %s\n", done, len(uris), shortURI(u, 55))
-			}
-			mu.Unlock()
+			reportDone(&mu, &done, total, roundNum, results[idx], u)
 		}(i, uri)
 	}
 	wg.Wait()
 
-	// sort passing results by latency
 	var passing []Candidate
 	for _, r := range results {
 		if r.Ms >= 0 {
@@ -84,12 +77,37 @@ func runRound(
 		passing = passing[:keepTop]
 	}
 
-	fmt.Printf("  → %d passed, keeping top %d\n", len(passing), len(passing))
+	if !jsonMode {
+		fmt.Printf("  → %d passed, keeping top %d\n", len(passing), len(passing))
+	}
 	return passing
 }
 
+// reportDone is called under mu from each worker goroutine on completion —
+// mu already serializes access here, so JSON lines never interleave.
+func reportDone(mu *sync.Mutex, done *int, total int, roundNum int, result Candidate, uri string) {
+	mu.Lock()
+	defer mu.Unlock()
+	*done++
+	d := *done
+
+	if jsonMode {
+		emit(map[string]interface{}{
+			"type":  "progress",
+			"round": roundNum,
+			"done":  d,
+			"total": total,
+		})
+		return
+	}
+
+	if result.Ms >= 0 {
+		fmt.Printf("  [%d/%d] %5dms  %s\n", d, total, result.Ms, shortURI(uri, 55))
+	} else {
+		fmt.Printf("  [%d/%d] FAIL    %s\n", d, total, shortURI(uri, 55))
+	}
+}
 func shortURI(uri string, maxLen int) string {
-	// strip fragment
 	for i, c := range uri {
 		if c == '#' {
 			uri = uri[:i]

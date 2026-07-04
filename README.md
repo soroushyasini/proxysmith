@@ -9,8 +9,9 @@ Three implementations — same algorithm, different platforms:
 | Component | Platform | Location |
 |-----------|----------|----------|
 | `bash/` | Linux/VPS (original) | Shell script, no dependencies |
-| `go/` | Linux/Windows/Mac | Go CLI, xray-core library |
+| `go/` | Linux/Windows/Mac CLI | Go CLI, xray-core library |
 | `android/` | Android 5.0+ | Flutter UI + Kotlin + libv2ray.aar |
+| `android/` (desktop) | Windows, Linux | Same Flutter UI, spawns the Go binary as a subprocess |
 
 ---
 

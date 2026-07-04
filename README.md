@@ -4,14 +4,14 @@ A proxy subscription tester that fetches public v2ray/xray subscription lists,
 tests each config against your real network, and returns the 10 fastest surviving
 nodes ranked by latency.
 
-Three implementations — same algorithm, different platforms:
+Four ways to run it — same algorithm, different platforms:
 
 | Component | Platform | Location |
 |-----------|----------|----------|
 | `bash/` | Linux/VPS (original) | Shell script, no dependencies |
 | `go/` | Linux/Windows/Mac CLI | Go CLI, xray-core library |
-| `android/` | Android 5.0+ | Flutter UI + Kotlin + libv2ray.aar |
-| `android/` (desktop) | Windows, Linux | Same Flutter UI, spawns the Go binary as a subprocess |
+| `app/` (mobile) | Android 5.0+ | Flutter UI + Kotlin + libv2ray.aar |
+| `app/` (desktop) | Windows, Linux | Same Flutter UI, spawns the `go/` pipeline binary as a subprocess |
 
 ---
 
@@ -93,7 +93,8 @@ Tests a single xray JSON config file directly.
 ## Component 2 — Go CLI (`go/`)
 
 Clean library-style port of the bash pipeline. No shell dependencies — uses
-xray-core as a Go library via `github.com/xtls/xray-core`.
+xray-core as a Go library via `github.com/xtls/xray-core`. This same binary
+also powers the Windows/Linux desktop app — see Component 4.
 
 ### Requirements
 
@@ -119,6 +120,18 @@ go build -o proxysmith .
 ./proxysmith ~/last_configs.txt 4
 ```
 
+### JSON output mode (used by the desktop app)
+
+```bash
+./proxysmith --sub-url <url> --test-count 350 --output-format jsonl
+```
+
+Emits newline-delimited, `PSJSON:`-prefixed JSON events on stdout —
+`status`, `fetched`, `progress`, `result`, `done`/`error` — so a calling
+process can parse pipeline state without scraping human-readable output.
+This is the same binary bundled with the desktop app (Component 4);
+`--output-format human` (the default) is what you get in interactive/CLI use.
+
 ### Go version pinning
 
 The `go.mod` pins `github.com/xtls/xray-core v1.260327.0`. **Do not run
@@ -129,7 +142,7 @@ and `gvisor` at incompatible versions. Always pin explicitly.
 
 ```
 go/
-├── main.go       # Entry point: prompts config, runs pipeline, writes output
+├── main.go       # Entry point: flags, JSON/human output mode, orchestration
 ├── fetch.go      # HTTP fetch of sub URL, base64 decode, sampling
 ├── parser.go     # URI → xray outbound JSON (ss, vless, vmess, trojan)
 ├── pipeline.go   # runRound(): concurrent testing, sorting, filtering
@@ -144,7 +157,7 @@ go/
 
 ---
 
-## Component 3 — Android App (`android/`)
+## Component 3 — Mobile App (`app/`, Android)
 
 Flutter UI over a Kotlin backend. The Kotlin layer runs the same 3-round
 pipeline using `libv2ray.aar` (AndroidLibXrayLite) as the xray-core engine.
@@ -179,7 +192,7 @@ The AAR is stored in this repo via **git-lfs**. Pull it with:
 git lfs pull
 ```
 
-The file will appear at `android/app/libs/libv2ray.aar` (~40MB).
+The file will appear at `app/android/app/libs/libv2ray.aar` (~40MB).
 
 If git-lfs is not available, build the AAR from source — see
 **Building libv2ray.aar** below.
@@ -187,7 +200,7 @@ If git-lfs is not available, build the AAR from source — see
 ### Run the app
 
 ```bash
-cd android/
+cd app/
 flutter pub get
 flutter run
 ```
@@ -205,15 +218,95 @@ minSdk:     21
 namespace:  ir.proxysmith.proxysmith_flutter
 ```
 
-Key dependencies in `android/app/build.gradle.kts`:
+Key dependencies in `app/android/app/build.gradle.kts`:
 ```kotlin
 implementation(files("libs/libv2ray.aar"))
 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 ```
 
-`android/android/gradle.properties` must contain:
+`app/android/gradle.properties` must contain:
 ```properties
 android.useAndroidX=true
+```
+
+---
+
+## Component 4 — Desktop App (`app/`, Windows/Linux)
+
+Same Flutter UI as the mobile app, targeting Flutter's Windows and Linux
+desktop platforms. Instead of a Kotlin bridge and `libv2ray.aar`, the
+desktop build spawns the `go/` pipeline binary as a subprocess and parses
+its `--output-format jsonl` stdout stream.
+
+### Architecture
+
+```
+Flutter UI (Dart)
+      │  PipelineService.create() picks the right backend at runtime
+      ▼
+DesktopPipelineService
+      │  Process.start(proxysmith-pipeline-<os>-amd64[.exe])
+      ▼
+go/ pipeline binary — same code as Component 2, JSON output mode
+      │  stdout: PSJSON:{"type":"progress",...} lines
+      ▼
+PipelineEvent stream → same widgets/screens as Android
+```
+
+`lib/services/pipeline_service.dart` is the shared interface;
+`pipeline_service_android.dart` and `pipeline_service_desktop.dart` are the
+two backends, so `pipeline_screen.dart` never needs to know which platform
+it's running on.
+
+### Requirements
+
+- Flutter 3.x with the Windows and/or Linux desktop platforms enabled:
+  ```bash
+  flutter config --enable-windows-desktop
+  flutter config --enable-linux-desktop
+  ```
+- Windows: Developer Mode enabled (`ms-settings:developers`) — required for
+  Flutter's plugin symlinks.
+- Linux: build **from a Linux host** (native or WSL2 with a Flutter SDK
+  installed inside the WSL filesystem — a Windows-mounted SDK under `/mnt/c/`
+  will fail on CRLF line endings in its shell scripts).
+- A built `go/` pipeline binary for your platform (see Component 2 for the
+  build command) — this is bundled separately, not built as part of the
+  Flutter app.
+
+### Build
+
+```bash
+cd app/
+flutter create --platforms=windows .   # or --platforms=linux, one-time setup
+flutter build windows --release        # or: flutter build linux --release
+```
+
+### Bundle the pipeline binary
+
+The desktop app expects the Go binary at `<release folder>/bin/`. Build it
+from `go/` (see Component 2), place it at `app/windows/bin/` or
+`app/linux/bin/` (see the README in each), then run the matching script from
+the repo root:
+
+```powershell
+.\scripts\bundle_desktop_binaries.ps1
+```
+```bash
+./scripts/bundle_desktop_binaries.sh
+```
+
+This copies the binary into the actual release bundle
+(`app/build/windows/x64/runner/Release/bin/` or
+`app/build/linux/x64/release/bundle/bin/`). It's currently a manual
+post-build step, not yet wired into the CMake build itself.
+
+### Run
+
+Launch the built executable directly:
+```
+app/build/windows/x64/runner/Release/proxysmith.exe
+app/build/linux/x64/release/bundle/proxysmith
 ```
 
 ---
@@ -287,7 +380,7 @@ Build time: 5–15 minutes. Output: `libv2ray.aar` (~40MB).
 
 Copy to the Flutter project:
 ```bash
-cp libv2ray.aar /path/to/proxysmith/android/app/libs/
+cp libv2ray.aar /path/to/proxysmith/app/android/app/libs/
 ```
 
 ### Why Go 1.23?
@@ -325,11 +418,13 @@ one URI per line).
 
 ## Network Notes
 
-- The device/VPS running the test must have open access to the proxy endpoints
+- The device/VPS/PC running the test must have open access to the proxy endpoints
 - From inside Iran: run on an external VPS, or ensure an upstream proxy is
-  configured (`HTTPS_PROXY` for Go, system proxy for Android)
+  configured (`HTTPS_PROXY` for Go, system proxy for Android/desktop)
 - The Android app runs the full pipeline on-device — a foreground service is
   recommended for the ~12 minute run to prevent Android from killing it
+- The desktop app runs the pipeline as a local subprocess, so it isn't
+  subject to the same background-execution limits as mobile
 
 ---
 
@@ -339,6 +434,36 @@ one URI per line).
 |----------|-------------|---------------|-------------|
 | Finland VPS (Go) | 104ms | 9m 8s | 1242 of 6210 |
 | Android x86_64 emulator | 102ms | ~12 min | 1454 of 7270 |
+| Windows 11 (desktop app) | confirmed working end-to-end (July 2026) | — | — |
+| Linux desktop, WSL2-built (desktop app) | confirmed working end-to-end (July 2026) | — | — |
+
+Full benchmark numbers for the desktop builds haven't been collected yet —
+only functional correctness has been verified so far.
+
+---
+
+## Repo Layout
+
+```
+proxysmith/
+├── bash/     — Component 1: original shell implementation
+├── go/       — Component 2: Go CLI, also the shared pipeline binary
+│              for the desktop app
+├── app/      — Components 3 & 4: Flutter UI (Android/Windows/Linux)
+│   ├── lib/
+│   │   ├── screens/    — pipeline_screen.dart, etc.
+│   │   ├── services/   — PipelineService abstraction (pipeline_event.dart,
+│   │   │                 pipeline_service.dart, and the android/desktop
+│   │   │                 backends)
+│   │   └── ...
+│   ├── android/        — native Android project (Kotlin bridge, Gradle)
+│   ├── windows/        — native Windows project (bin/ holds the bundled
+│   │                     pipeline binary, gitignored)
+│   └── linux/          — native Linux project (bin/ holds the bundled
+│                          pipeline binary, gitignored)
+└── scripts/  — bundle_desktop_binaries.{sh,ps1}: post-build step that
+               copies the Go binary into the desktop release bundle
+```
 
 ---
 

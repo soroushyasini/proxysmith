@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../models/config_source.dart';
-import '../services/pipeline_bridge.dart';
+import '../services/pipeline_event.dart';
+import '../services/pipeline_service.dart';
 import '../services/source_storage.dart';
 import '../theme/app_theme.dart';
 import '../widgets/labeled_switch.dart';
@@ -41,11 +42,13 @@ class _PipelineScreenState extends State<PipelineScreen> {
   bool _selectionMode = false;
   final Set<int> _selectedIndices = {};
 
-  StreamSubscription? _eventSub;
+  StreamSubscription<PipelineEvent>? _eventSub;
+  late final PipelineService _pipelineService;
 
   @override
   void initState() {
     super.initState();
+    _pipelineService = PipelineService.create();
     _loadUserSources();
   }
 
@@ -84,33 +87,41 @@ class _PipelineScreenState extends State<PipelineScreen> {
       _selectedIndices.clear();
     });
 
-    await _eventSub?.cancel();
-    _eventSub = PipelineBridge.eventChannel.receiveBroadcastStream().listen(
-      (event) {
-        final e = Map<String, dynamic>.from(event as Map);
-        final type = e['type'] as String;
-        final data = e['data'];
+    // Tracks the highest `done` seen per round so an out-of-order (or
+    // future non-monotonic) progress event can never make the bar jump
+    // backward — see the ordering note on ProgressEvent.
+    final maxDoneByRound = <int, int>{};
 
+    await _eventSub?.cancel();
+    _eventSub = _pipelineService
+        .start(subUrl: _effectiveUrl, testCount: _testCount)
+        .listen(
+      (event) {
         if (!mounted) return;
 
         setState(() {
-          switch (type) {
-            case 'status':
+          switch (event) {
+            case StatusEvent(:final message):
               // Backend sends free-text dev-facing status; only used as a
               // fallback when no richer event (fetched/progress) has fired.
-              final s = data as String;
-              if (s == 'stopped') {
+              if (message == 'stopped') {
                 _statusKey = 'statusStopped';
               }
-            case 'fetched':
-              _fetchedCount = data as int;
+
+            case FetchedEvent(:final count):
+              _fetchedCount = count;
               _statusKey = 'statusFetched';
               _statusArgs = {'count': _fetchedCount};
-            case 'progress':
-              final p = Map<String, dynamic>.from(data as Map);
-              _round = p['round'] as int;
-              _done = p['done'] as int;
-              _total = p['total'] as int;
+
+            case ProgressEvent(:final round, :final done, :final total):
+              final maxDone = maxDoneByRound.update(
+                round,
+                (prev) => done > prev ? done : prev,
+                ifAbsent: () => done,
+              );
+              _round = round;
+              _done = maxDone;
+              _total = total;
               _statusKey = switch (_round) {
                 1 => 'statusRound1',
                 2 => 'statusRound2',
@@ -125,8 +136,46 @@ class _PipelineScreenState extends State<PipelineScreen> {
                 3 => 0.9 + (_done / _total) * 0.1,
                 _ => _progress,
               };
-            case 'warning':
-              _warningMessage = data as String;
+
+            case WarningEvent(:final message):
+              _warningMessage = message;
+
+            case ResultEvent(:final rank, :final ms, :final uri):
+              // Results arrive one at a time, already rank-ordered.
+              if (_results.length < rank) {
+                _results.add({'uri': uri, 'ms': ms});
+              } else {
+                _results[rank - 1] = {'uri': uri, 'ms': ms};
+              }
+
+            case DoneEvent(:final count):
+              _progress = 1.0;
+              _statusKey = 'statusDone';
+              _statusArgs = {'count': count};
+              _running = false;
+
+            case ErrorEvent(:final message, :final code):
+              switch (code) {
+                case 'EMPTY_BODY':
+                  _statusKey = 'errorEmptyBody';
+                  _statusArgs = null;
+                case 'DECODE_FAILURE':
+                  _statusKey = 'errorDecodeFailure';
+                  _statusArgs = null;
+                case 'NO_VALID_SCHEMES':
+                  _statusKey = 'errorNoValidSchemes';
+                  _statusArgs = null;
+                case 'NETWORK_ERROR':
+                  _statusKey = 'errorNetwork';
+                  _statusArgs = {'message': message};
+                case 'PIPELINE_TIMEOUT':
+                  _statusKey = 'errorTimeout';
+                  _statusArgs = {'minutes': 10};
+                default:
+                  _statusKey = 'errorGeneric';
+                  _statusArgs = {'message': message};
+              }
+              _running = false;
           }
         });
       },
@@ -135,62 +184,18 @@ class _PipelineScreenState extends State<PipelineScreen> {
         setState(() {
           _statusKey = 'errorGeneric';
           _statusArgs = {'message': error.toString()};
+          _running = false;
         });
       },
+      onDone: () {
+        if (!mounted) return;
+        if (_running) setState(() => _running = false);
+      },
     );
-
-    try {
-      final raw = await PipelineBridge.startPipeline(
-        subUrl: _effectiveUrl,
-        testCount: _testCount,
-      );
-
-      if (!mounted) return;
-
-      if (raw != null) {
-        final list = (raw as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-        setState(() {
-          _results = list;
-          _progress = 1.0;
-          _statusKey = 'statusDone';
-          _statusArgs = {'count': list.length};
-        });
-      } else {
-        setState(() => _statusKey = 'statusStopped');
-      }
-    } on PlatformException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        switch (e.code) {
-          case 'EMPTY_BODY':
-            _statusKey = 'errorEmptyBody';
-            _statusArgs = null;
-          case 'DECODE_FAILURE':
-            _statusKey = 'errorDecodeFailure';
-            _statusArgs = null;
-          case 'NO_VALID_SCHEMES':
-            _statusKey = 'errorNoValidSchemes';
-            _statusArgs = null;
-          case 'NETWORK_ERROR':
-            _statusKey = 'errorNetwork';
-            _statusArgs = {'message': e.message ?? ''};
-          case 'PIPELINE_TIMEOUT':
-            _statusKey = 'errorTimeout';
-            _statusArgs = {'minutes': 10};
-          default:
-            _statusKey = 'errorGeneric';
-            _statusArgs = {'message': e.message ?? e.code};
-        }
-      });
-    } finally {
-      if (mounted) setState(() => _running = false);
-    }
   }
 
   Future<void> _stop() async {
-    await PipelineBridge.stopPipeline();
+    await _pipelineService.stop();
     if (!mounted) return;
     setState(() {
       _running = false;

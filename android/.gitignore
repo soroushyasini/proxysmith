@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# Desktop pipeline binaries (built locally, distributed via GitHub Releases)
+windows/bin/*.exe
+linux/bin/proxysmith-pipeline-linux-amd64
+!windows/bin/README.md
+!linux/bin/README.md

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: go/go.sum
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go build -trimpath -o /tmp/proxysmith .
+
+  flutter-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --debug --target-platform android-arm64
+      - run: chmod +x android/gradlew
+      - run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon
+
+  scripts:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash -n bash/proxysmith.sh bash/manualconfig.sh scripts/bundle_desktop_binaries.sh
+      - name: Parse PowerShell scripts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $allErrors = @()
+          foreach ($path in @("$PWD/app/build_all.ps1", "$PWD/scripts/bundle_desktop_binaries.ps1")) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            $allErrors += $parseErrors
+          }
+          if ($allErrors) { $allErrors | Format-List; exit 1 }

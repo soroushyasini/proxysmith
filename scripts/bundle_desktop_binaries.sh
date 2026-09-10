@@ -7,11 +7,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$REPO_ROOT/android/linux/bin/proxysmith-pipeline-linux-amd64"
-DEST_DIR="$REPO_ROOT/android/build/linux/x64/release/bundle/bin"
-
+SRC="$REPO_ROOT/app/linux/bin/proxysmith-pipeline-linux-amd64"
+DEST_DIR="$REPO_ROOT/app/build/linux/x64/release/bundle/bin"
 if [[ ! -f "$SRC" ]]; then
-  echo "error: $SRC not found. Build it first (see android/linux/bin/README.md)." >&2
+  echo "error: $SRC not found. Build it first (see app/linux/bin/README.md)." >&2
   exit 1
 fi
 

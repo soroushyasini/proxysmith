@@ -2,7 +2,7 @@
 # One URI per line. Blank lines and lines starting with # are ignored.
 #
 # Accepted protocols:
-#   vless://   vmess://   trojan://   ss://   tuic://   hysteria2://   hy2://
+#   vless://   vmess://   trojan://   ss://   hysteria2://   hy2://
 #
 # Example entries (replace with your real configs):
 #

@@ -1,0 +1,172 @@
+{
+  "@@locale": "en",
+
+  "appName": "ProxySmith",
+  "appTagline": "Find the fastest, most stable free servers",
+
+  "configSourceLabel": "CONFIG SOURCE",
+  "@configSourceLabel": {
+    "description": "Label above the subscription source dropdown"
+  },
+  "sourceCustomUrl": "Custom URL",
+  "sourceCustomUrlHint": "Paste a subscription URL",
+
+  "testCountLabel": "Configs to test",
+  "advancedSettings": "Advanced testing settings",
+  "maxLatencyLabel": "Maximum latency (ms)",
+  "concurrencyLabel": "Concurrent tests",
+  "testEndpointLabel": "Test endpoint",
+
+  "statusReady": "Ready",
+  "statusFetching": "Fetching subscription...",
+  "statusFetched": "Fetched {count} configs",
+  "@statusFetched": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statusRound1": "Testing proxies (round 1 of 3)",
+  "statusRound2": "Refining results (round 2 of 3)",
+  "statusRound3": "Final ranking (round 3 of 3)",
+  "statusProgress": "{done} / {total}",
+  "@statusProgress": {
+    "placeholders": {
+      "done": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "statusDone": "Done — {count} results",
+  "@statusDone": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statusDoneTimed": "Done — {count} results in {seconds}s",
+  "@statusDoneTimed": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "seconds": { "type": "int" }
+    }
+  },
+  "statusStopped": "Stopped",
+
+  "errorEmptyBody": "The subscription URL returned an empty response. Check the URL is correct and the server is up.",
+  "errorDecodeFailure": "The subscription content could not be decoded. It may be a login page or an unsupported format.",
+  "errorNoValidSchemes": "The subscription has no supported proxy types. Supported: VMess, VLESS, Trojan, Shadowsocks, and Hysteria2.",
+  "errorSubscriptionTooLarge": "The subscription exceeded the 10 MiB response or 64 KiB line safety limit.",
+  "errorNoResults": "No configurations passed. Try raising the latency limit or testing more configurations.",
+  "errorInvalidOptions": "Enter valid HTTP(S) URLs and testing limits before starting.",
+  "errorNetwork": "Could not reach the subscription server after 3 attempts: {message}",
+  "@errorNetwork": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+  "errorTimeout": "Pipeline exceeded the {minutes}-minute time limit and was stopped.",
+  "@errorTimeout": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "errorGeneric": "Error: {message}",
+  "@errorGeneric": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+
+  "runButton": "Run pipeline",
+  "stopButton": "Stop testing",
+
+  "resultsTitle": "TOP RESULTS",
+  "copyAll": "Copy all",
+  "copiedAll": "Copied {count} URIs",
+  "@copiedAll": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "copiedOne": "Copied #{index}",
+  "@copiedOne": {
+    "placeholders": { "index": { "type": "int" } }
+  },
+  "noResultsYet": "No results yet",
+  "noResultsHint": "Run the pipeline to find working proxies",
+
+  "selectButton": "Select",
+  "selectedCount": "{count} selected",
+  "@selectedCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "copySelected": "Copy selected",
+  "cancelSelection": "Cancel",
+  "dismissButton": "Dismiss",
+  "closeButton": "Close",
+  "optionsButton": "More options",
+  "qrButton": "Show QR code",
+  "resultQrTitle": "Result #{index}",
+  "@resultQrTitle": {
+    "placeholders": { "index": { "type": "int" } }
+  },
+
+  "menuAbout": "About",
+  "menuFeedback": "Send feedback",
+  "menuDonate": "Support the project",
+  "menuSources": "Manage sources",
+  "menuCheckUpdate": "Check for updates",
+
+  "updateAvailableTitle": "Update available",
+  "updateAvailableBody": "A newer version ({latest}) is available. You have {current}.",
+  "@updateAvailableBody": {
+    "placeholders": {
+      "latest": { "type": "String" },
+      "current": { "type": "String" }
+    }
+  },
+  "updateLaterButton": "Later",
+  "updateOpenGithubButton": "Open GitHub",
+  "updateUpToDate": "You're on the latest version",
+  "updateCheckFailed": "Could not check for updates",
+  "donateSupportButton": "Support on Reymit",
+
+  "sourcesManagerTitle": "Subscription sources",
+  "sourcesBuiltInLabel": "BUILT-IN",
+  "sourcesCustomLabel": "YOUR SOURCES",
+  "sourcesEmptyHint": "No custom sources yet. Tap + to add one.",
+  "sourcesAddTitle": "Add source",
+  "sourcesEditTitle": "Edit source",
+  "sourcesAliasLabel": "Name",
+  "sourcesUrlLabel": "Subscription URL",
+  "sourcesAddButton": "Add",
+  "sourcesSaveButton": "Save",
+  "sourcesDeleteTitle": "Delete source?",
+  "sourcesDeleteBody": "Remove {name} from your sources?",
+  "@sourcesDeleteBody": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "sourcesDeleteButton": "Delete",
+  "sourcesDeleted": "Deleted {name}",
+  "@sourcesDeleted": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "sourcesNameRequired": "Enter a name",
+  "sourcesUrlInvalid": "Enter a valid HTTP or HTTPS URL",
+  "undoButton": "Undo",
+
+  "aboutTitle": "About ProxySmith",
+  "aboutVersion": "Version {version}",
+  "@aboutVersion": {
+    "placeholders": { "version": { "type": "String" } }
+  },
+  "aboutDescription": "ProxySmith tests proxy subscription lists and ranks them by reliability and latency so you can find a fast, stable server.",
+
+  "donateTitle": "Support the project",
+  "donateDescription": "If ProxySmith saves you time and helps you stay connected, you can support the developer.",
+  "donateUsdtLabel": "USDT (ERC20)",
+  "donateAddressCopied": "Address copied",
+
+  "feedbackTitle": "Send feedback",
+  "feedbackDescription": "Found a bug or have a suggestion? Reach out on Telegram.",
+  "feedbackButton": "Open Telegram",
+
+  "linkLaunchFailed": "Couldn't open the link. No app found to handle it.",
+
+  "warningPartialResults": "{message}",
+  "@warningPartialResults": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+
+  "languageEnglish": "English",
+  "languagePersian": "فارسی",
+
+  "themeLight": "Light",
+  "themeDark": "Dark"
+}

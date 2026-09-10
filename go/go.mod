@@ -1,4 +1,4 @@
-module proxysmith-test
+module github.com/soroushyasini/proxysmith/go
 
 go 1.26
 

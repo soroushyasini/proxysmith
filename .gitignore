@@ -1,18 +1,46 @@
-android/app/libs/*.aar
+# IDE and operating-system files
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db
 
-# Flutter/Android build artifacts
-android/build/
-android/.gradle/
-android/app/build/
-android/.dart_tool/
-android/.flutter-plugins
-android/.flutter-plugins-dependencies
+# Flutter and Android build artifacts
+app/build/
+app/release/
+app/.gradle/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/android/.gradle/
+app/android/.kotlin/
+app/android/build/
+app/android/app/build/
+app/android/local.properties
+**/key.properties
+app/android/*.iml
+
+# Signing credentials and local configuration
+*.jks
+*.keystore
+*.p12
+.env
+.env.*
+!.env.example
 
 # Go build artifacts
 go/proxysmith
+go/proxysmith.exe
+go/proxysmith-pipeline-*
 go/results*.txt
+/results*.txt
 
-# General
-*.DS_Store
-android/key.properties
-*.jks
+# Generated server output and release bundles
+bash/output/
+bash/manualconfig.json
+/proxysmith-*.zip
+/proxysmith-*.tar.gz
+
+# Logs, coverage, and crash dumps
+*.log
+*.dmp
+coverage/

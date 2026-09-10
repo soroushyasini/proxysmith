@@ -1,0 +1,112 @@
+{
+  "@@locale": "fa",
+
+  "appName": "پراکسی‌اسمیت",
+  "appTagline": "پایدارترین و سریع‌ترین سرورهای رایگان را پیدا کنید",
+
+  "configSourceLabel": "منبع کانفیگ",
+  "sourceCustomUrl": "آدرس سفارشی",
+  "sourceCustomUrlHint": "لینک سابسکریپشن را وارد کنید",
+
+  "testCountLabel": "تعداد کانفیگ برای تست",
+  "advancedSettings": "تنظیمات پیشرفته تست",
+  "maxLatencyLabel": "حداکثر تأخیر (میلی‌ثانیه)",
+  "concurrencyLabel": "تست‌های هم‌زمان",
+  "testEndpointLabel": "سرور سنجش",
+
+  "statusReady": "آماده برای تست",
+  "statusFetching": "در حال دریافت سابسکریپشن...",
+  "statusFetched": "{count} کانفیگ دریافت شد",
+  "statusRound1": "تست پراکسی‌ها (دور ۱ از ۳)",
+  "statusRound2": "بهبود نتایج (دور ۲ از ۳)",
+  "statusRound3": "رتبه‌بندی نهایی (دور ۳ از ۳)",
+  "statusProgress": "{done} / {total}",
+  "statusDone": "تمام شد — {count} نتیجه",
+  "statusDoneTimed": "تمام شد — {count} نتیجه در {seconds} ثانیه",
+  "statusStopped": "متوقف شد",
+
+  "errorEmptyBody": "کانفیگی از لینک سابسکریپشن دریافت نشد. آدرس و سرور را بررسی کنید.",
+  "errorDecodeFailure": "محتوای سابسکریپشن قابل خواندن نبود. ممکن است صفحه ورود یا فرمت، پشتیبانی‌نشده باشد.",
+  "errorNoValidSchemes": "سابسکریپشن هیچ نوع پراکسی پشتیبانی‌شده‌ای ندارد. پشتیبانی‌شده‌ها: VMess، VLESS، Trojan، Shadowsocks و Hysteria2.",
+  "errorSubscriptionTooLarge": "حجم سابسکریپشن از حد ایمنی ۱۰ مگابایت برای پاسخ یا ۶۴ کیلوبایت برای هر خط بیشتر بود.",
+  "errorNoResults": "هیچ کانفیگی پذیرفته نشد. حد تأخیر یا تعداد کانفیگ‌های آزمایشی را افزایش دهید.",
+  "errorInvalidOptions": "پیش از شروع، آدرس‌های HTTP(S) و محدودیت‌های تست را درست وارد کنید.",
+  "errorNetwork": "اتصال به سرور سابسکریپشن پس از ۳ تلاش برقرار نشد: {message}",
+  "errorTimeout": "زمان اجرا از {minutes} دقیقه بیشتر شد و متوقف گردید.",
+  "errorGeneric": "خطا: {message}",
+
+  "runButton": "اجرای تست",
+  "stopButton": "توقف تست",
+
+  "resultsTitle": "بهترین نتایج",
+  "copyAll": "کپی همه",
+  "copiedAll": "{count} آدرس کپی شد",
+  "copiedOne": "مورد #{index} کپی شد",
+  "noResultsYet": "هنوز نتیجه‌ای یافت نشد",
+  "noResultsHint": "برای یافتن پراکسی‌های فعال، تست را اجرا کنید",
+
+  "selectButton": "انتخاب",
+  "selectedCount": "{count} مورد انتخاب شد",
+  "copySelected": "کپی موارد انتخابی",
+  "cancelSelection": "انصراف",
+  "dismissButton": "بستن",
+  "closeButton": "بستن",
+  "optionsButton": "گزینه‌های بیشتر",
+  "qrButton": "نمایش کد QR",
+  "resultQrTitle": "نتیجه شماره {index}",
+
+  "menuAbout": "درباره برنامه",
+  "menuFeedback": "ارسال بازخورد",
+  "menuDonate": "حمایت از پروژه",
+  "menuSources": "مدیریت منابع",
+
+  "menuCheckUpdate": "بررسی به‌روزرسانی",
+  "updateAvailableTitle": "به‌روزرسانی موجود است",
+  "updateAvailableBody": "نسخه جدیدتری ({latest}) موجود است. نسخه فعلی شما {current} است.",
+  "updateLaterButton": "بعداً",
+  "updateOpenGithubButton": "باز کردن گیت‌هاب",
+  "updateUpToDate": "شما از آخرین نسخه استفاده می‌کنید",
+  "updateCheckFailed": "بررسی به‌روزرسانی ممکن نشد",
+  "donateSupportButton": "حمایت از طریق ریمیت",
+
+  "sourcesManagerTitle": "مخازن سابسکریپشن",
+  "sourcesBuiltInLabel": "پیش‌فرض",
+  "sourcesCustomLabel": "مخازن شما",
+  "sourcesEmptyHint": "هنوز مخزن سفارشی اضافه نکرده‌اید. برای افزودن، روی + بزنید.",
+  "sourcesAddTitle": "افزودن منبع",
+  "sourcesEditTitle": "ویرایش منبع",
+  "sourcesAliasLabel": "نام",
+  "sourcesUrlLabel": "آدرس سابسکریپشن",
+  "sourcesAddButton": "افزودن",
+  "sourcesSaveButton": "ذخیره",
+  "sourcesDeleteTitle": "منبع حذف شود؟",
+  "sourcesDeleteBody": "منبع «{name}» حذف شود؟",
+  "sourcesDeleteButton": "حذف",
+  "sourcesDeleted": "«{name}» حذف شد",
+  "sourcesNameRequired": "یک نام وارد کنید",
+  "sourcesUrlInvalid": "یک آدرس معتبر HTTP یا HTTPS وارد کنید",
+  "undoButton": "بازگردانی",
+
+  "aboutTitle": "درباره پراکسی‌اسمیت",
+  "aboutVersion": "نسخه {version}",
+  "aboutDescription": "پراکسی‌اسمیت کانفیگ‌های لینک سابسکریپشن شما را طی چند مرحله غربال می‌کند و بر اساس پایداری و تأخیر رتبه‌بندی می‌کند تا یک سرور سریع و پایدار پیدا کنید.",
+
+  "donateTitle": "حمایت از پروژه",
+  "donateDescription": "اگر پراکسی‌اسمیت در زمان شما صرفه‌جویی کرد و به اتصال پایدار شما کمک کرد، می‌توانید از توسعه‌دهنده این برنامه حمایت کنید.",
+  "donateUsdtLabel": "تتر (شبکه ERC20)",
+  "donateAddressCopied": "آدرس کپی شد",
+
+  "feedbackTitle": "ارسال بازخورد",
+  "feedbackDescription": "باگی پیدا کردید یا پیشنهادی دارید؟ از طریق تلگرام با توسعه دهنده در ارتباط باشید.",
+  "feedbackButton": "باز کردن تلگرام",
+
+  "linkLaunchFailed": "باز کردن لینک ممکن نشد. برنامه‌ای برای این کار پیدا نشد.",
+
+  "warningPartialResults": "{message}",
+
+  "languageEnglish": "English",
+  "languagePersian": "فارسی",
+
+  "themeLight": "روشن",
+  "themeDark": "تیره"
+}

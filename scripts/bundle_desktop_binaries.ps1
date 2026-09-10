@@ -7,11 +7,11 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$Src      = Join-Path $RepoRoot "android\windows\bin\proxysmith-pipeline-windows-amd64.exe"
-$DestDir  = Join-Path $RepoRoot "android\build\windows\x64\runner\Release\bin"
+$Src      = Join-Path $RepoRoot "app\windows\bin\proxysmith-pipeline-windows-amd64.exe"
+$DestDir  = Join-Path $RepoRoot "app\build\windows\x64\runner\Release\bin"
 
 if (-not (Test-Path $Src)) {
-    Write-Error "$Src not found. Build it first (see android/windows/bin/README.md)."
+    Write-Error "$Src not found. Build it first (see app/windows/bin/README.md)."
     exit 1
 }
 

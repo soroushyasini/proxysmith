@@ -1,353 +1,202 @@
 #!/usr/bin/env bash
-# =============================================================================
-# manualconfig.sh  —  Parse a hand-picked list of proxy URIs into config.json
-#
-# Usage:
-#   bash manualconfig.sh                        # reads manualconfig.txt, writes manualconfig.json
-#   bash manualconfig.sh my_proxies.txt         # custom input file
-#   bash manualconfig.sh proxies.txt out.json   # custom input + output
-#   bash manualconfig.sh --deploy               # parse + deploy + restart xray
-#
-# Input format (manualconfig.txt):
-#   One URI per line. Blank lines and lines starting with # are ignored.
-#   Accepted protocols: vless, vmess, trojan, ss, shadowsocks, tuic, hysteria2, hy2
-#
-# Output: manualconfig.json  (same directory as this script)
-# =============================================================================
+# Build a validated Xray config from a local list of proxy URIs.
 
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# ── defaults (overridable by positional args) ─────────────────────────────────
 INPUT_FILE="$SCRIPT_DIR/manualconfig.txt"
 OUTPUT_FILE="$SCRIPT_DIR/manualconfig.json"
+OUTPUT_CONFIG="/usr/local/etc/xray/config.json"
+TEST_URL="https://cp.cloudflare.com/generate_204"
 DEPLOY=false
 
-# ── arg parsing ───────────────────────────────────────────────────────────────
-for arg in "$@"; do
-    case "$arg" in
-        --deploy) DEPLOY=true ;;
-        *.txt)    INPUT_FILE="$arg" ;;
-        *.json)   OUTPUT_FILE="$arg" ;;
-        *) echo "Unknown argument: $arg" >&2; exit 1 ;;
-    esac
+usage() {
+  printf 'usage: %s [--deploy] [input.txt] [output.json]\n' "$0" >&2
+}
+
+for argument in "$@"; do
+  case "$argument" in
+    --deploy) DEPLOY=true ;;
+    *.txt) INPUT_FILE="$argument" ;;
+    *.json) OUTPUT_FILE="$argument" ;;
+    *) usage; exit 2 ;;
+  esac
 done
 
-OUTPUT_CONFIG="/usr/local/etc/xray/config.json"
+log() { printf '[*] %s\n' "$*"; }
+ok() { printf '[+] %s\n' "$*"; }
+die() { printf '[!] %s\n' "$*" >&2; exit 1; }
 
-# ── colours ───────────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
-DIM='\033[2m'; WHITE='\033[1;97m'; GREY='\033[0;90m'
-log()  { echo -e "${CYAN}[*]${NC} $*"; }
-ok()   { echo -e "${GREEN}[✓]${NC} $*"; }
-warn() { echo -e "${YELLOW}[!]${NC} $*"; }
-die()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
-
-# ── banner ────────────────────────────────────────────────────────────────────
-echo -e "\033[0;31m"
-cat << 'BANNER'
-  ██████╗ ██████╗  ██████╗ ██╗  ██╗██╗   ██╗███████╗███╗   ███╗██╗████████╗██╗  ██╗
-  ██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝╚██╗ ██╔╝██╔════╝████╗ ████║██║╚══██╔══╝██║  ██║
-  ██████╔╝██████╔╝██║   ██║ ╚███╔╝  ╚████╔╝ ███████╗██╔████╔██║██║   ██║   ███████║
-  ██╔═══╝ ██╔══██╗██║   ██║ ██╔██╗   ╚██╔╝  ╚════██║██║╚██╔╝██║██║   ██║   ██╔══██║
-  ██║     ██║  ██║╚██████╔╝██╔╝ ██╗   ██║   ███████║██║ ╚═╝ ██║██║   ██║   ██║  ██║
-  ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝     ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
-BANNER
-echo -e "\033[1;37m    Manual Config Builder  —  Skip the hunt, just parse and deploy\033[0m"
-echo -e "\033[0;90m            ─────────────────────────────────────────────────────────────\033[0m"
-echo -e "\033[0;90m            Author  :  Soroush Yasini\033[0m"
-echo -e "\033[0;90m            Repo    :  https://github.com/soroushyasini/proxysmith\033[0m"
-echo -e "\033[0;90m            ─────────────────────────────────────────────────────────────\033[0m"
-echo -e "\033[0m"
-
-# ── dep check (light — only xray-knife and python3 needed here) ───────────────
-echo -e "${WHITE}  🔍  Checking dependencies${NC}"
-echo -e "${GREY}  ──────────────────────────────────────────────────${NC}"
-dep_ok=true
-for cmd in xray-knife python3; do
-    if command -v "$cmd" &>/dev/null; then
-        printf "  ${GREEN}[✓]${NC}  %-14s ${DIM}%s${NC}\n" "$cmd" "$(command -v "$cmd")"
-    else
-        printf "  ${RED}[✗]${NC}  %-14s ${RED}not found${NC}\n" "$cmd"
-        dep_ok=false
-    fi
+for command_name in xray-knife xray python3; do
+  command -v "$command_name" >/dev/null 2>&1 || die "Missing required command: $command_name"
 done
-echo -e "${GREY}  ──────────────────────────────────────────────────${NC}\n"
-[[ "$dep_ok" == true ]] || die "Missing dependencies. Run proxysmith.sh first — it will install everything."
+[[ -f "$INPUT_FILE" ]] || die "Input file does not exist: $INPUT_FILE"
+[[ -r "$INPUT_FILE" ]] || die "Input file is not readable: $INPUT_FILE"
 
-# ── validate input file ───────────────────────────────────────────────────────
-[[ -f "$INPUT_FILE" ]] || die "Input file not found: $INPUT_FILE
-  Create it and add one proxy URI per line, e.g.:
-    vless://uuid@host:port?...#remark
-    ss://base64@host:port#remark
-    trojan://password@host:port?...#remark"
-
-# Count non-empty, non-comment lines
-TOTAL_LINES=$(grep -cE '^[^#[:space:]]' "$INPUT_FILE" 2>/dev/null || echo 0)
-[[ "$TOTAL_LINES" -gt 0 ]] || die "No valid URIs found in $INPUT_FILE  (blank or all lines are comments)"
-
-echo -e "  ${BOLD}Input :${NC}  $INPUT_FILE  ${DIM}($TOTAL_LINES lines)${NC}"
-echo -e "  ${BOLD}Output:${NC}  $OUTPUT_FILE"
-echo ""
-
-# ── parse URIs into outbound JSON ─────────────────────────────────────────────
-log "Parsing $TOTAL_LINES URIs via xray-knife..."
-echo ""
-
-WORK_DIR=$(mktemp -d)
-trap 'rm -rf "$WORK_DIR"' EXIT
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/proxysmith-manual.XXXXXXXX")"
+trap 'rm -rf -- "$WORK_DIR"' EXIT
 OUTBOUNDS_JSON="$WORK_DIR/outbounds.json"
+FINAL_CONFIG="$WORK_DIR/config.json"
 
-python3 << PYEOF
-import subprocess, json, sys, re
+log "Parsing the local proxy list"
+python3 - "$INPUT_FILE" "$OUTBOUNDS_JSON" <<'PY'
+import json
+import os
+import subprocess
+import sys
+from urllib.parse import urldefrag, urlsplit
 
-input_path     = "$INPUT_FILE"
-outbounds_path = "$OUTBOUNDS_JSON"
+input_path, output_path = sys.argv[1:]
+maximum_file_bytes = 10 * 1024 * 1024
+maximum_line_bytes = 64 * 1024
+accepted = {"vless", "vmess", "trojan", "ss", "shadowsocks", "hysteria2", "hy2"}
 
-# Accepted scheme prefixes
-ACCEPTED = ('vless://', 'vmess://', 'trojan://', 'ss://', 'shadowsocks://',
-            'tuic://', 'hysteria2://', 'hy2://', 'http://', 'https://',
-            'socks://', 'socks5://')
+if os.path.getsize(input_path) > maximum_file_bytes:
+    raise SystemExit("Input exceeds the 10 MiB safety limit")
 
-lines_raw = open(input_path, encoding='utf-8', errors='replace').read().splitlines()
-
-# Filter: skip blanks and comments
-uris = []
-skipped_fmt = []
-for raw in lines_raw:
-    line = raw.strip()
-    if not line or line.startswith('#'):
-        continue
-    if any(line.lower().startswith(p) for p in ACCEPTED):
-        uris.append(line)
-    else:
-        skipped_fmt.append(line)
-
-if skipped_fmt:
-    print(f"  Skipped {len(skipped_fmt)} lines with unrecognised scheme:")
-    for s in skipped_fmt[:5]:
-        print(f"    {DIM}{s[:80]}")
-    if len(skipped_fmt) > 5:
-        print(f"    ... and {len(skipped_fmt)-5} more")
-    print()
-
-print(f"  Processing {len(uris)} valid URIs...\n")
-
-outbounds = []
-tags = []
-proto_counters = {}
-errors = []
-
-for uri in uris:
-    proto = uri.split('://')[0].lower()
-    # normalise ss alias
-    if proto == 'shadowsocks':
-        proto = 'ss'
-
-    try:
-        result = subprocess.run(
-            ['xray-knife', 'parse', '-c', uri, '--json'],
-            capture_output=True, text=True, timeout=10
-        )
-        raw = result.stdout.strip()
-        if not raw:
-            err_msg = result.stderr.strip()[:120] if result.stderr.strip() else "empty output"
-            errors.append((uri, err_msg))
-            print(f"  ${RED}[✗]${NC}  {uri[:70]}")
-            print(f"       {DIM}{err_msg}{NC}")
+unique = {}
+unsupported = malformed = duplicates = 0
+with open(input_path, encoding="utf-8", errors="strict") as source:
+    for raw in source:
+        if len(raw.encode("utf-8")) > maximum_line_bytes:
+            raise SystemExit("Input contains a line longer than 64 KiB")
+        uri = raw.strip()
+        if not uri or uri.startswith("#"):
             continue
-
-        obj = json.loads(raw)
-
-        # Handle full config wrapper vs bare outbound object
-        if 'outbounds' in obj:
-            ob = next(
-                (o for o in obj['outbounds']
-                 if o.get('protocol') not in ('freedom', 'blackhole')),
-                None
-            )
-        elif 'protocol' in obj:
-            ob = obj
-        else:
-            errors.append((uri, f"unexpected JSON shape: {list(obj.keys())}"))
-            print(f"  ${RED}[✗]${NC}  {uri[:70]}")
-            print(f"       ${DIM}unexpected JSON shape: {list(obj.keys())}{NC}")
-            continue
-
-        if not ob:
-            errors.append((uri, "no usable outbound extracted"))
-            print(f"  ${RED}[✗]${NC}  {uri[:70]}")
-            continue
-
-        proto_counters[proto] = proto_counters.get(proto, 0) + 1
-        tag = f"{proto}_{proto_counters[proto]:02d}"
-        ob['tag'] = tag
-
-        outbounds.append(ob)
-        tags.append(tag)
-
-        # Try to show host for a friendly log line
         try:
-            import urllib.parse
-            parsed = urllib.parse.urlparse(uri.split('#')[0])
-            host_info = f"{parsed.hostname}:{parsed.port}"
-        except Exception:
-            host_info = uri[len(proto)+3:][:40]
+            scheme = urlsplit(uri).scheme.lower()
+        except ValueError:
+            malformed += 1
+            continue
+        if scheme not in accepted:
+            unsupported += 1
+            continue
+        identity = urldefrag(uri).url
+        if identity in unique:
+            duplicates += 1
+            continue
+        unique[identity] = uri
 
-        remark = uri.split('#')[-1] if '#' in uri else ''
-        remark_str = f"  {DIM}# {remark[:35]}{NC}" if remark else ''
-        print(f"  ${GREEN}[✓]${NC}  {tag:<14}  {host_info:<35}{remark_str}")
-
-    except subprocess.TimeoutExpired:
-        errors.append((uri, "xray-knife parse timed out"))
-        print(f"  ${RED}[✗]${NC}  {uri[:70]}")
-        print(f"       ${YELLOW}timed out{NC}")
-    except json.JSONDecodeError as e:
-        errors.append((uri, f"JSON parse error: {e}"))
-        print(f"  ${RED}[✗]${NC}  {uri[:70]}")
-        print(f"       ${DIM}JSON error: {e}{NC}")
-    except Exception as e:
-        errors.append((uri, str(e)))
-        print(f"  ${RED}[✗]${NC}  {uri[:70]}")
-        print(f"       ${DIM}{e}{NC}")
-
-print()
-print(f"  Parsed  : {len(outbounds)} / {len(uris)} URIs OK")
-if errors:
-    print(f"  Failed  : {len(errors)}")
-print()
-
-with open(outbounds_path, 'w') as f:
-    json.dump({'outbounds': outbounds, 'tags': tags}, f)
+outbounds, tags, counters = [], [], {}
+failed = 0
+for uri in unique.values():
+    scheme = urlsplit(uri).scheme.lower()
+    protocol = "ss" if scheme == "shadowsocks" else scheme
+    completed = subprocess.run(
+        ["xray-knife", "parse", "-c", uri, "--json"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if completed.returncode != 0 or not completed.stdout.strip():
+        failed += 1
+        continue
+    try:
+        parsed = json.loads(completed.stdout)
+        candidates = parsed.get("outbounds", []) if "outbounds" in parsed else [parsed]
+        outbound = next(
+            item for item in candidates
+            if item.get("protocol") not in {"freedom", "blackhole"}
+        )
+    except (json.JSONDecodeError, KeyError, StopIteration, TypeError):
+        failed += 1
+        continue
+    counters[protocol] = counters.get(protocol, 0) + 1
+    tag = f"{protocol}_{counters[protocol]:02d}"
+    outbound["tag"] = tag
+    outbounds.append(outbound)
+    tags.append(tag)
 
 if not outbounds:
-    print("ERROR: No outbounds could be parsed — nothing to write.", flush=True)
-    sys.exit(1)
-PYEOF
+    raise SystemExit("No supported URI could be converted to an Xray outbound")
 
-# ── check python exited cleanly ───────────────────────────────────────────────
-[ -f "$OUTBOUNDS_JSON" ] || die "Parser produced no output file — check errors above"
-PARSED_COUNT=$(python3 -c "import json; d=json.load(open('$OUTBOUNDS_JSON')); print(len(d['outbounds']))")
-[[ "$PARSED_COUNT" -gt 0 ]] || die "All URIs failed to parse — nothing to write"
-ok "$PARSED_COUNT outbound objects ready"
+with open(output_path, "w", encoding="utf-8") as destination:
+    json.dump({"outbounds": outbounds, "tags": tags}, destination)
 
-# ── assemble config.json ──────────────────────────────────────────────────────
-log "Assembling config.json..."
+print(
+    f"Accepted {len(outbounds)} unique entries; "
+    f"skipped {duplicates} duplicates, {unsupported} unsupported, "
+    f"{malformed} malformed, and {failed} parser failures"
+)
+PY
 
-python3 << PYEOF
+python3 - "$OUTBOUNDS_JSON" "$FINAL_CONFIG" "$TEST_URL" <<'PY'
 import json
+import sys
 
-data      = json.load(open("$OUTBOUNDS_JSON"))
-outbounds = data['outbounds']
-tags      = data['tags']
-
-outbounds.append({"tag": "direct",  "protocol": "freedom",   "settings": {"domainStrategy": "UseIPv4"}})
-outbounds.append({"tag": "blocked", "protocol": "blackhole", "settings": {}})
-
+source_path, destination_path, test_url = sys.argv[1:]
+with open(source_path, encoding="utf-8") as source:
+    data = json.load(source)
+outbounds, tags = data["outbounds"], data["tags"]
+outbounds += [
+    {"tag": "direct", "protocol": "freedom", "settings": {"domainStrategy": "UseIPv4"}},
+    {"tag": "blocked", "protocol": "blackhole", "settings": {}},
+]
 config = {
-    "inbounds": [
-        {
-            "listen": "127.0.0.1",
-            "port": 10808,
-            "protocol": "socks",
-            "settings": {"auth": "noauth", "udp": True}
-        },
-        {
-            "listen": "127.0.0.1",
-            "port": 62789,
-            "protocol": "tunnel",
-            "settings": {"address": "127.0.0.1"},
-            "tag": "api"
-        }
-    ],
+    "log": {"loglevel": "warning", "error": "/var/log/xray/error.log"},
+    "inbounds": [{
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {"auth": "noauth", "udp": True},
+    }],
     "outbounds": outbounds,
     "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
-            {"type": "field", "inboundTag": ["api"],                      "outboundTag": "api"},
-            {"type": "field", "ip":         ["geoip:private"],            "outboundTag": "blocked"},
-            {"type": "field", "domain":     ["geosite:category-ads-all"], "outboundTag": "blocked"},
-            {"type": "field", "protocol":   ["bittorrent"],               "outboundTag": "blocked"},
-            {"type": "field", "network":    "tcp,udp",                    "balancerTag":  "fast-tier"}
+            {"type": "field", "ip": ["geoip:private"], "outboundTag": "blocked"},
+            {"type": "field", "domain": ["geosite:category-ads-all"], "outboundTag": "blocked"},
+            {"type": "field", "protocol": ["bittorrent"], "outboundTag": "blocked"},
+            {"type": "field", "network": "tcp,udp", "balancerTag": "fast-tier"},
         ],
         "balancers": [{
-            "tag":         "fast-tier",
-            "selector":    tags,
+            "tag": "fast-tier",
+            "selector": tags,
             "fallbackTag": tags[0],
-            "strategy":    {"type": "leastPing"}
-        }]
-    },
-    "log": {
-        "loglevel": "warning",
-        "error": "/var/log/xray/error.log"
-    },
-    "policy": {
-        "system": {
-            "statsInboundDownlink":  True, "statsInboundUplink":    True,
-            "statsOutboundDownlink": True, "statsOutboundUplink":   True
-        },
-        "levels": {"0": {"statsUserDownlink": True, "statsUserUplink": True}}
+            "strategy": {"type": "leastPing"},
+        }],
     },
     "observatory": {
-        "subjectSelector":   tags,
-        "probeURL":          "https://www.google.com/generate_204",
-        "probeInterval":     "5s",
-        "enableConcurrency": False
+        "subjectSelector": tags,
+        "probeURL": test_url,
+        "probeInterval": "5s",
+        "enableConcurrency": False,
     },
-    "api": {
-        "tag": "api",
-        "services": ["StatsService", "HandlerService", "LoggerService", "RoutingService"]
-    },
-    "stats": {},
-    "metrics": {"listen": "127.0.0.1:11111", "tag": "metrics_out"}
 }
+with open(destination_path, "w", encoding="utf-8") as destination:
+    json.dump(config, destination, indent=2)
+PY
 
-with open("$OUTPUT_FILE", 'w') as f:
-    json.dump(config, f, indent=2)
+log "Validating the generated configuration with Xray"
+xray run -test -config "$FINAL_CONFIG" || die "Xray rejected the generated configuration; nothing was written"
 
-print(f"  Outbounds : {len(tags)}")
-print(f"  Tags      : {', '.join(tags)}")
-print(f"  Balancer  : leastPing  →  fallback: {tags[0]}")
-PYEOF
+OUTPUT_DIR="$(dirname "$OUTPUT_FILE")"
+mkdir -p -- "$OUTPUT_DIR"
+install -m 0600 "$FINAL_CONFIG" "${OUTPUT_FILE}.new"
+mv -- "${OUTPUT_FILE}.new" "$OUTPUT_FILE"
+ok "Validated configuration written to $OUTPUT_FILE"
 
-# ── validate JSON ─────────────────────────────────────────────────────────────
-python3 -c "import json; json.load(open('$OUTPUT_FILE'))" \
-    && ok "JSON is valid" \
-    || die "Output file failed JSON validation — this is a bug, please report it"
-
-# ── optional xray syntax check ────────────────────────────────────────────────
-if command -v xray &>/dev/null; then
-    log "Running xray config test..."
-    if xray run -test -config "$OUTPUT_FILE" 2>&1 | grep -q "Configuration OK"; then
-        ok "Xray config test passed"
-    else
-        warn "Xray test had warnings (may still be OK):"
-        xray run -test -config "$OUTPUT_FILE" 2>&1 | tail -5
-    fi
-fi
-
-echo ""
-echo -e "  ${BOLD}Written:${NC}  $OUTPUT_FILE"
-echo ""
-
-# ── deploy ────────────────────────────────────────────────────────────────────
 if [[ "$DEPLOY" == true ]]; then
-    log "Deploying to $OUTPUT_CONFIG..."
-    BACKUP="${OUTPUT_CONFIG}.bak.$(date +%Y%m%d_%H%M%S)"
-    [ -f "$OUTPUT_CONFIG" ] && sudo cp "$OUTPUT_CONFIG" "$BACKUP" && ok "Backup: $BACKUP"
-    sudo cp "$OUTPUT_FILE" "$OUTPUT_CONFIG"
-    ok "Config deployed to $OUTPUT_CONFIG"
-    sudo systemctl restart xray
-    sleep 2
-    sudo systemctl is-active xray \
-        && ok "Xray is running" \
-        || warn "Xray may have failed — check: journalctl -u xray -n 20"
+  BACKUP="${OUTPUT_CONFIG}.bak.$(date +%Y%m%d_%H%M%S)"
+  had_previous=false
+  if sudo test -f "$OUTPUT_CONFIG"; then
+    sudo cp -- "$OUTPUT_CONFIG" "$BACKUP"
+    had_previous=true
+  fi
+  sudo install -m 0644 "$FINAL_CONFIG" "${OUTPUT_CONFIG}.new"
+  sudo mv -- "${OUTPUT_CONFIG}.new" "$OUTPUT_CONFIG"
+  if ! sudo systemctl restart xray || ! sudo systemctl is-active --quiet xray; then
+    if [[ "$had_previous" == true ]]; then
+      sudo cp -- "$BACKUP" "$OUTPUT_CONFIG"
+      sudo systemctl restart xray || true
+      die "Deployment failed; the previous configuration was restored"
+    fi
+    sudo rm -f -- "$OUTPUT_CONFIG"
+    die "Deployment failed and there was no previous configuration to restore"
+  fi
+  ok "Deployed successfully; backup: $BACKUP"
 else
-    echo -e "${YELLOW}To deploy this config:${NC}"
-    echo -e "  sudo cp $OUTPUT_FILE $OUTPUT_CONFIG"
-    echo -e "  sudo systemctl restart xray"
-    echo ""
-    echo -e "${YELLOW}Or re-run with:${NC}  $0 --deploy"
+  printf 'Re-run with --deploy after reviewing %s\n' "$OUTPUT_FILE"
 fi

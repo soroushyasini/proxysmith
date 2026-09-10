@@ -5,69 +5,84 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
-	core "github.com/xtls/xray-core/core"
 	xnet "github.com/xtls/xray-core/common/net"
+	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf/serial"
 )
 
-func measureDelay(configJSON string, testURL string) (int64, error) {
+type Measurement struct {
+	Ms        int64
+	JitterMs  int64
+	Successes int
+	Attempts  int
+}
+
+func measureDelay(configJSON, testURL string, attempts int) (Measurement, error) {
 	config, err := serial.LoadJSONConfig(strings.NewReader(configJSON))
 	if err != nil {
-		return -1, fmt.Errorf("config parse: %w", err)
+		return Measurement{}, fmt.Errorf("config parse: %w", err)
 	}
 	config.Inbound = nil
-
-	inst, err := core.New(config)
+	instance, err := core.New(config)
 	if err != nil {
-		return -1, fmt.Errorf("core.New: %w", err)
+		return Measurement{}, fmt.Errorf("core.New: %w", err)
 	}
-	if err := inst.Start(); err != nil {
-		return -1, fmt.Errorf("inst.Start: %w", err)
+	if err := instance.Start(); err != nil {
+		return Measurement{}, fmt.Errorf("inst.Start: %w", err)
 	}
-	defer inst.Close()
-
+	defer instance.Close()
 	if testURL == "" {
-		testURL = "https://www.google.com/generate_204"
+		testURL = "https://cp.cloudflare.com/generate_204"
 	}
-
-	tr := &http.Transport{
+	if attempts < 1 {
+		attempts = 1
+	}
+	transport := &http.Transport{
+		DisableKeepAlives:   true,
 		TLSHandshakeTimeout: 6 * time.Second,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, portStr, err := net.SplitHostPort(addr)
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, portString, err := net.SplitHostPort(address)
 			if err != nil {
 				return nil, err
 			}
-			port, err := net.LookupPort(network, portStr)
+			port, err := net.LookupPort(network, portString)
 			if err != nil {
 				return nil, err
 			}
-			dest := xnet.TCPDestination(
-				xnet.ParseAddress(host),
-				xnet.Port(port),
-			)
-			return core.Dial(ctx, inst, dest)
+			destination := xnet.TCPDestination(xnet.ParseAddress(host), xnet.Port(port))
+			return core.Dial(ctx, instance, destination)
 		},
 	}
-	client := &http.Client{Transport: tr, Timeout: 12 * time.Second}
-
-	var best int64 = -1
-	for i := 0; i < 2; i++ {
-		start := time.Now()
-		resp, err := client.Get(testURL)
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 12 * time.Second}
+	samples := make([]int64, 0, attempts)
+	for i := 0; i < attempts; i++ {
+		started := time.Now()
+		response, err := client.Get(testURL)
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
-		ms := time.Since(start).Milliseconds()
-		if best < 0 || ms < best {
-			best = ms
+		response.Body.Close()
+		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusBadRequest {
+			continue
 		}
+		samples = append(samples, time.Since(started).Milliseconds())
 	}
-	if best < 0 {
-		return -1, fmt.Errorf("all attempts failed")
+	return summarizeSamples(samples, attempts)
+}
+
+func summarizeSamples(samples []int64, attempts int) (Measurement, error) {
+	if attempts < 1 {
+		return Measurement{}, fmt.Errorf("attempt count must be positive")
 	}
-	return best, nil
+	if len(samples) < attempts/2+1 {
+		return Measurement{}, fmt.Errorf("only %d of %d attempts succeeded", len(samples), attempts)
+	}
+	ordered := append([]int64(nil), samples...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+	return Measurement{Ms: ordered[len(ordered)/2], JitterMs: ordered[len(ordered)-1] - ordered[0], Successes: len(ordered), Attempts: attempts}, nil
 }

@@ -75,7 +75,7 @@ android {
     dependencies {
         implementation(files("libs/libv2ray.aar"))
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-        testImplementation("org.json:json:20250517")
+        testImplementation("org.json:json:20260814")
         testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.3.20")
     }
 

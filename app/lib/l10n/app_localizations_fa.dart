@@ -178,6 +178,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get menuAbout => 'درباره برنامه';
 
   @override
+  String get menuPrivacy => 'حریم خصوصی';
+
+  @override
   String get menuFeedback => 'ارسال بازخورد';
 
   @override

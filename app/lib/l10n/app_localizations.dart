@@ -380,6 +380,12 @@ abstract class AppLocalizations {
   /// **'About'**
   String get menuAbout;
 
+  /// No description provided for @menuPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get menuPrivacy;
+
   /// No description provided for @menuFeedback.
   ///
   /// In en, this message translates to:

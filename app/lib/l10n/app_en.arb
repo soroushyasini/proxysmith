@@ -98,6 +98,7 @@
   },
 
   "menuAbout": "About",
+  "menuPrivacy": "Privacy policy",
   "menuFeedback": "Send feedback",
   "menuDonate": "Support the project",
   "menuSources": "Manage sources",

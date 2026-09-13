@@ -19,6 +19,16 @@ const String _kReleasesApiUrl =
     'https://api.github.com/repos/soroushyasini/proxysmith/releases/latest';
 const String _kReleasesPageUrl =
     'https://github.com/soroushyasini/proxysmith/releases/latest';
+const String _kPrivacyPolicyUrl =
+    'https://soroushyasini.github.io/proxysmith/privacy-policy/';
+
+Widget _menuItem(IconData icon, String label) => Row(
+  children: [
+    Icon(icon, size: 18),
+    const SizedBox(width: 10),
+    Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+  ],
+);
 
 /// Top-bar "..." menu button. Opens a popup with About / Sources / Feedback
 /// / Donate / Check for updates.
@@ -48,6 +58,8 @@ class OptionsMenuButton extends StatelessWidget {
               context: context,
               builder: (_) => AboutDialogContent(version: currentVersion),
             );
+          case 'privacy':
+            _launch(context, _kPrivacyPolicyUrl);
           case 'sources':
             await Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SourcesManagerScreen()),
@@ -71,53 +83,33 @@ class OptionsMenuButton extends StatelessWidget {
       itemBuilder: (context) => [
         PopupMenuItem(
           value: 'about',
-          child: Row(
-            children: [
-              const Icon(Icons.info_outline_rounded, size: 18),
-              const SizedBox(width: 10),
-              Text(l10n.menuAbout),
-            ],
-          ),
+          child: _menuItem(Icons.info_outline_rounded, l10n.menuAbout),
+        ),
+        PopupMenuItem(
+          value: 'privacy',
+          child: _menuItem(Icons.privacy_tip_outlined, l10n.menuPrivacy),
         ),
         PopupMenuItem(
           value: 'sources',
-          child: Row(
-            children: [
-              const Icon(Icons.list_alt_rounded, size: 18),
-              const SizedBox(width: 10),
-              Text(l10n.menuSources),
-            ],
-          ),
+          child: _menuItem(Icons.list_alt_rounded, l10n.menuSources),
         ),
         PopupMenuItem(
           value: 'update',
-          child: Row(
-            children: [
-              const Icon(Icons.system_update_alt_rounded, size: 18),
-              const SizedBox(width: 10),
-              Text(l10n.menuCheckUpdate),
-            ],
+          child: _menuItem(
+            Icons.system_update_alt_rounded,
+            l10n.menuCheckUpdate,
           ),
         ),
         PopupMenuItem(
           value: 'feedback',
-          child: Row(
-            children: [
-              const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-              const SizedBox(width: 10),
-              Text(l10n.menuFeedback),
-            ],
+          child: _menuItem(
+            Icons.chat_bubble_outline_rounded,
+            l10n.menuFeedback,
           ),
         ),
         PopupMenuItem(
           value: 'donate',
-          child: Row(
-            children: [
-              const Icon(Icons.favorite_outline_rounded, size: 18),
-              const SizedBox(width: 10),
-              Text(l10n.menuDonate),
-            ],
-          ),
+          child: _menuItem(Icons.favorite_outline_rounded, l10n.menuDonate),
         ),
       ],
     );

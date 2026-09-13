@@ -178,6 +178,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuAbout => 'About';
 
   @override
+  String get menuPrivacy => 'Privacy policy';
+
+  @override
   String get menuFeedback => 'Send feedback';
 
   @override

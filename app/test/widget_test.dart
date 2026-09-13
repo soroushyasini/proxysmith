@@ -42,4 +42,19 @@ void main() {
 
     expect(find.text('Enter a valid HTTP or HTTPS URL'), findsOneWidget);
   });
+
+  testWidgets('options menu exposes the privacy policy', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 1920));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      const ProxySmithApp(initialSettings: AppSettings.defaults),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('More options'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Privacy policy'), findsOneWidget);
+  });
 }

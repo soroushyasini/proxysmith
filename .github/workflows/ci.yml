@@ -70,3 +70,7 @@ jobs:
             $allErrors += $parseErrors
           }
           if ($allErrors) { $allErrors | Format-List; exit 1 }
+      - name: Test Windows PowerShell compatibility
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\scripts\tests\build_all_compat_test.ps1

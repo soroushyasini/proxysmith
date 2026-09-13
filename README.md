@@ -71,7 +71,7 @@ cd app
 .\build_all.ps1
 ```
 
-The script runs dependency resolution, analysis, and tests before producing ARMv7, ARM64, and universal APKs under `app/release/`. `SHA256SUMS.txt` is generated alongside them. The release directory and signing material are ignored by Git.
+The script runs dependency resolution, analysis, and tests before producing ARMv7, ARM64, and universal APKs plus a Google Play App Bundle under `app/release/`. `SHA256SUMS.txt` is generated alongside them. The release directory and signing material are ignored by Git.
 
 Kotlin compilation is intentionally non-incremental and in-process because this Windows checkout and the Flutter package cache live on different drives. This avoids the cross-volume cache failure during a normal `flutter build` invocation.
 

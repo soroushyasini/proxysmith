@@ -52,7 +52,7 @@ The app has no account, so the account-deletion requirement is not applicable. U
 
 - [ ] Confirm the verified Play Console owner and supported registration country
 - [ ] Confirm the permanent package name before the first upload
-- [ ] Publish the privacy policy at an active public URL
+- [x] Publish the privacy policy at an active public URL
 - [ ] Add a public support email in Play Console
 - [ ] Prepare icon, feature graphic, and credential-free screenshots
 - [ ] Upload the AAB to Internal testing first

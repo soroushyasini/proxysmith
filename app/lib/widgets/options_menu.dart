@@ -19,8 +19,8 @@ const String _kReleasesApiUrl =
     'https://api.github.com/repos/soroushyasini/proxysmith/releases/latest';
 const String _kReleasesPageUrl =
     'https://github.com/soroushyasini/proxysmith/releases/latest';
-const String _kPrivacyPolicyUrl =
-    'https://soroushyasini.github.io/proxysmith/privacy-policy/';
+const String privacyPolicyUrl =
+    'https://github.com/soroushyasini/proxysmith/blob/main/docs/privacy-policy.md';
 
 Widget _menuItem(IconData icon, String label) => Row(
   children: [
@@ -59,7 +59,7 @@ class OptionsMenuButton extends StatelessWidget {
               builder: (_) => AboutDialogContent(version: currentVersion),
             );
           case 'privacy':
-            _launch(context, _kPrivacyPolicyUrl);
+            _launch(context, privacyPolicyUrl);
           case 'sources':
             await Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SourcesManagerScreen()),

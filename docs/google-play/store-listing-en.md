@@ -8,7 +8,7 @@
 - Contains ads: No
 - Suggested target audience: Adults (18 and over); not designed for children
 - Support URL: `https://github.com/soroushyasini/proxysmith/issues`
-- Privacy policy URL after GitHub Pages is enabled: `https://soroushyasini.github.io/proxysmith/privacy-policy/`
+- Privacy policy URL: `https://github.com/soroushyasini/proxysmith/blob/main/docs/privacy-policy.md`
 
 ## Short description
 

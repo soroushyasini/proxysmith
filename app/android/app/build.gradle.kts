@@ -76,7 +76,7 @@ android {
         implementation(files("libs/libv2ray.aar"))
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
         testImplementation("org.json:json:20250517")
-        testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.3.20")
+        testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.10")
     }
 
     flutter {

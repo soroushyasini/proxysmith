@@ -35,7 +35,7 @@ dependencies:
   intl: ^0.20.2
   url_launcher: ^6.3.0
   qr_flutter: ^4.1.0
-  flutter_svg: ^2.0.10
+  flutter_svg: ^2.3.2
   shared_preferences: ^2.3.2
   http: ^1.2.0
   path: ^1.9.0
